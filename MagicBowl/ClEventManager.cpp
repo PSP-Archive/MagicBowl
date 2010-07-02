@@ -22,15 +22,20 @@
 std::vector<Event> ClEventManager::events;
 
 bool ClEventManager::triggerEvent(EventId evId){
-	events[evId-1].callback(events[evId-1].cbObject, events[evId-1].cbParam);
+	if (!events[evId-1].triggered){
+		events[evId-1].callback(events[evId-1].cbObject, events[evId-1].cbParam);
+		events[evId-1].triggered = true;
+	}
 	return true;
 }
 
 bool ClEventManager::triggerEvent(void* triggerObject){
 	unsigned int e;
 	for (e = 0; e <events.size();e++){
-		if (events[e].cbTrigger == triggerObject)
+		if (events[e].cbTrigger == triggerObject && !events[e].triggered){
 			events[e].callback(events[e].cbObject, events[e].cbParam);
+			events[e].triggered = true;
+		}
 	}
 	return true;
 }
@@ -42,6 +47,7 @@ EventId ClEventManager::registerEvent(void* trigger, void* reciever, EventCallba
 	newEvent.cbTrigger = trigger;
 	newEvent.cbObject = reciever;
 	newEvent.cbParam = cbParameter;
+	newEvent.triggered = false;
 
 	events.push_back(newEvent);
 

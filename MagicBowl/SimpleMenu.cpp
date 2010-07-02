@@ -52,11 +52,11 @@ short ClSimpleMenu::handleMenu(){
 		vertex = (ColorIVertex*)sceGuGetMemory(sizeof(ColorIVertex)*2);
 		vertex[0].x = pX-10;
 		vertex[0].y = pY+32*i - 20;
-		vertex[0].z = 0x0;
+		vertex[0].z = 0xffff;
 
 		vertex[1].x = pX+250;
 		vertex[1].y = pY+32*i + 10;
-		vertex[1].z = 0x0;
+		vertex[1].z = 0xffff;
 		if (i == (this->selectedItem - 1)){
 			vertex[0].color = vertex[1].color = 0x66ff3333;
 		}else{

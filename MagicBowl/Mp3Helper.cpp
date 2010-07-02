@@ -221,7 +221,7 @@ int ClMp3Helper::playThread(SceSize args, void *argp){
 	free(mp3Init.pcmBuf);
 
 	threadId=0;
-	return 0;
+	return sceKernelExitDeleteThread(0);
 }
 
 void ClMp3Helper::closeMP3(){

@@ -51,6 +51,7 @@ typedef struct UserState{
 	unsigned int points;
 	unsigned int mana;
 	bool red_cyan;
+	bool triggerFlipped;
 }UserState;
 
 class ClMagicBowlApp : public Cl3dHomebrew {
@@ -85,7 +86,9 @@ public:
 		MBA_SHOW_CREDITS,
 		MBA_SHOW_OPTIONS,
 		MBA_OPT_ENABLE_3D,
-		MBA_OPT_DISABLE_3D
+		MBA_OPT_DISABLE_3D,
+		MBA_OPT_TRIGGER_NORMAL,
+		MBA_OPT_TRIGGER_FLIPPED
 	}ApplicationStates;
 
 	/*
@@ -145,9 +148,11 @@ protected:
 	ClSimpleMenu* mainMenu;
 	ClSimpleMenu* optionMenu;
 	ClSimpleMenu* levelMenu;
+	ClSimpleMenu* levelInGameMenu;
 	monzoom::Texture* introTex;
 	monzoom::Texture* logoTex;
 	monzoom::Texture* mainMenuTex;
+	monzoom::Texture* loadingTex;
 	ApplicationStates currentState;
 	ClSimpleTimer* timer;
 

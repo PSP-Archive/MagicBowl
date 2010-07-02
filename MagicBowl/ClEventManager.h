@@ -32,6 +32,7 @@ typedef struct Event{
 	void* cbTrigger;
 	void* cbObject;
 	void* cbParam;
+	bool triggered;
 } Event;
 
 class ClEventManager {

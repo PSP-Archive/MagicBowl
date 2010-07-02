@@ -32,7 +32,7 @@ public:
 	 */
 	ClSceneObject* move(float gravity);
 
-	ScePspFVector4 * getPosition() const;
+	const ScePspFVector4 * getPosition();
 
 	virtual void render();
 

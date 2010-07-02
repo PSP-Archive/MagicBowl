@@ -76,11 +76,25 @@ ClLevel::ClLevel(MDLFileData levelData, ClMagicBowlApp* app) {
 	viewAngle = 0.0f;
 	r3dAngle = 1.25f;
 	viewDistance = 80.0f;
+
+	initProgress = 0;
 }
 
-void ClLevel::initLevel() {
+void ClLevel::initLevel(bool triggerFlipped) {
 	int initThread;
-	initThread = sceKernelCreateThread("initLevel", ClLevel::initThread, 0x12, 0x40000, THREAD_ATTR_USER, 0);
+	/*
+	 * some initialization not necessarily need to be performed in a seperate thread
+	 */
+	if (triggerFlipped)
+		this->viewAngleChange = -1.0f;
+	else
+		this->viewAngleChange = 1.0f;
+
+	/*
+	 * setup and start init thread for asynchronous initialization...
+	 */
+	initThread = sceKernelCreateThread("initLevel", ClLevel::initThread, 0x12, 0x40000, THREAD_ATTR_USER | THREAD_ATTR_VFPU, 0);
+	initProgress = 0;
 	if (initThread >= 0){
 		ThreadParams params;
 		params.level = this;
@@ -142,32 +156,37 @@ void ClLevel::render(bool red_cyan){
 
 		//set the ambient color a bit brighter if rendered using 3D
 		if (red_cyan){
-			levelScene->setAmbientLight(0xff777777);
+			levelScene->setAmbientLight(0xffaaaaaa);
 		}
 	}
 	//initialize the timer
+	int dummy = 1;
 	if (!timer->isReset()) timer->reset();
 	if(!runTime->isReset()) runTime->reset();
 	//to enable constant application of physics and movement
 	//appart from render speed we use the timer to handle this
 	//movement etc. will be calculated 40 times per second
-	if (timer->getDeltaSeconds() >= 0.025f) {
-		//move the bowl dependent on the physics
-		touchObject = sBowl->move(physics.gravity);
-		timer->reset();
+	//in the case we are running with in game menu we do not apply any movement/physics
+	//TODO: the timer need to be set on hold...
+	if (currentState != MBL_INGAME_MENU){
+		if (timer->getDeltaSeconds() >= 0.025f) {
+			//move the bowl dependent on the physics
+			touchObject = sBowl->move(physics.gravity);
+			timer->reset();
 
-		//as we have moved the bowl now, check if we have collision with
-		//an object and if so act dependend on this object
-		if (touchObject){
-			if (strcmp(touchObject->getName(), "Plane_Target")==0){
-				currentState = MBL_TASK_FINISHED;
-				return;
+			//as we have moved the bowl now, check if we have collision with
+			//an object and if so act dependend on this object
+			if (touchObject){
+				if (strcmp(touchObject->getName(), "Plane_Target")==0){
+					currentState = MBL_TASK_FINISHED;
+					return;
+				}
 			}
 		}
 	}
 
 
-	ScePspFVector4* bowlPos;
+	const ScePspFVector4* bowlPos;
 	ScePspFMatrix4 lightProjInf;
 	ScePspFMatrix4 lightView;
 
@@ -336,7 +355,10 @@ void ClLevel::render(bool red_cyan){
 	 * everything was drawn to the screen,
 	 * handle the pad....
 	 */
-	handlePad();
+	if (currentState != MBL_INGAME_MENU){
+		//do not handle pad if we are in pause mode
+		handlePad();
+	}
 	/*
 
 	this->renderPassObjectsNormal();
@@ -416,10 +438,10 @@ void ClLevel::handlePad(){
 	sBowl->applyAcceleration(padX, padY, &viewMatrix);
 
 	if (pad.Buttons){
-		/*if (pad.Buttons & PSP_CTRL_START){
-			currentState = MBL_TASK_FAILED;
+		if (pad.Buttons & PSP_CTRL_START){
+			currentState = MBL_INGAME_MENU;
 		}
-		*/
+
 		if (pad.Buttons & PSP_CTRL_UP){
 			viewDistance-= 0.5f;
 			if (viewDistance<=40.0f)
@@ -439,10 +461,10 @@ void ClLevel::handlePad(){
 		}
 		*/
 		if (pad.Buttons & PSP_CTRL_LTRIGGER){
-			viewAngle+= 1.0f;
+			viewAngle+= viewAngleChange;
 		}
 		if (pad.Buttons & PSP_CTRL_RTRIGGER){
-			viewAngle-= 1.0f;
+			viewAngle-= viewAngleChange;
 		}
 	}
 }
@@ -649,6 +671,8 @@ int ClLevel::initThread(SceSize args, void *argp){
 	bowlPos.z = level->lvlFileData.bowlPosZ;
 	bowlPos.w = 0.0f;
 
+	level->initProgress = 10;
+
 	level->timer = new ClSimpleTimer();
 	level->runTime = new ClSimpleTimer();
 	level->maxTime = level->lvlFileData.maxTime;
@@ -659,6 +683,7 @@ int ClLevel::initThread(SceSize args, void *argp){
 	//delay the current thread to allow main thread continuing
 	sceKernelDelayThread(500000);//half a second
 
+	level->initProgress = 25;
 	//load the 3D Level Objects from Monzoom file and init the
 	//scene
 	level->levelScene = new monzoom::ClSceneMgr();
@@ -674,13 +699,17 @@ int ClLevel::initThread(SceSize args, void *argp){
 	//delay the current thread to allow main thread continuing
 	sceKernelDelayThread(500000);//half a second
 
+	level->initProgress = 50;
+
 	level->timerTex = ClTextureMgr::getInstance()->loadFromPNG("Timer.png");
 
 	sceKernelDelayThread(500000);
 
+	level->initProgress = 70;
 	//now setup the actions for good performance
 	ClStaticSceneObject* target;
 	for (unsigned short a = 0;a < level->lvlFileData.actions; a++){
+		level->initProgress++;
 		//search for the mentioned source object, if this is "NULL" this
 		//this is an action executed immediately
 		if (strcmp(level->lvlFileData.actionList[a].sourceObject, "NULL")==0){
@@ -699,6 +728,9 @@ int ClLevel::initThread(SceSize args, void *argp){
 						//therefore it is a membervariable of the LEVEL-Class
 						level->sosInactive = SOS_INACTIVE;
 						ClEventManager::registerEvent(0,level->levelScene->getChilds()[t], ClStaticSceneObject::eventReciever, &level->sosInactive);
+						break;
+					case 3:
+						ClEventManager::registerEvent(0,level->levelScene->getChilds()[t], ClAnimatedSceneObject::eventReciever, 0);
 						break;
 					}
 				}
@@ -724,6 +756,9 @@ int ClLevel::initThread(SceSize args, void *argp){
 								level->sosVisible = SOS_VISIBLE;
 								ClEventManager::registerEvent(level->levelScene->getChilds()[o],level->levelScene->getChilds()[t], ClStaticSceneObject::eventReciever, &level->sosVisible);
 								break;
+							case 3:
+								ClEventManager::registerEvent(level->levelScene->getChilds()[o],level->levelScene->getChilds()[t], ClAnimatedSceneObject::eventReciever, 0);
+								break;
 							}
 
 						}
@@ -733,11 +768,19 @@ int ClLevel::initThread(SceSize args, void *argp){
 		}
 		sceKernelDelayThread(10000);
 	}
+	level->initProgress = 90;
 	level->currentState = MBL_INIT_SUCCESS;
 
+	level->initProgress = 100;
 	return sceKernelExitDeleteThread(0);
 }
 
+int ClLevel::getInitProgress(){
+	return initProgress;
+}
 LevelStates ClLevel::getLevelState(){
 	return currentState;
+}
+void ClLevel::setLevelState(LevelStates newState){
+	currentState = newState;
 }

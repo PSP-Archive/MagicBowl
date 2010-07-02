@@ -5,7 +5,7 @@
  *      Author: andreborrmann
  */
 
-//#define RENDER_STATS
+#define RENDER_STATS
 
 extern "C"{
 #include <pspkernel.h>
@@ -28,7 +28,7 @@ using namespace monzoom;
 #define DATABUFFLEN   0x20
 
 char key[] = "QTAK319JQKJ952HA";
-char *titleShow = "New Save";
+char *titleShow = "New Save\0";
 
 char nameMultiple[][20] =	// End list with ""
 {
@@ -77,6 +77,15 @@ bool ClMagicBowlApp::init(){
 		fread(levelData[i].objectFile, sizeof(char), length, file);
 		//terminate string
 		levelData[i].objectFile[length] = 0;
+
+		fread(&length, sizeof(int), 1, file);
+		//get Memory for file name
+		levelData[i].loadImage = (char*)malloc((sizeof(char)*length)+1);
+		fread(levelData[i].loadImage, sizeof(char), length, file);
+		//terminate string
+		levelData[i].loadImage[length] = 0;
+
+
 		fread(&levelData[i].gravity, sizeof(float), 1, file);
 		fread(&levelData[i].bowlPosX, sizeof(float),3, file);
 		fread(&levelData[i].lightPosX, sizeof(float),3, file);
@@ -125,8 +134,10 @@ bool ClMagicBowlApp::init(){
 	logoTex = 0;
 	introTex = 0;
 	mainMenuTex = 0;
+	loadingTex = 0;
 	mainMenu = 0;
 	levelMenu = 0;
+	levelInGameMenu = 0;
 
 	fovFlip = false;
 	ClMp3Helper::initMP3();
@@ -137,6 +148,7 @@ bool ClMagicBowlApp::init(){
 	playerInfo.points = 0;    //no points at all
 	playerInfo.mana = 0;      //no mana at all
 	playerInfo.red_cyan = false; //default no 3D effect
+	playerInfo.triggerFlipped = false; //default trigger rotation behavior
 
 	//setup the training level
 	trainingLevel = new MDLFileData[1];
@@ -149,8 +161,17 @@ bool ClMagicBowlApp::init(){
 	trainingLevel->gravity = 0.1f;
 	trainingLevel->lightColor = 0xffffffff;
 	trainingLevel->maxTime = 999.0f;
-	trainingLevel->objectFile = "data/Training.mon";
-	trainingLevel->actions = 0;
+	trainingLevel->objectFile = "data/Training.mon\0";
+	trainingLevel->loadImage = "intro.png\0";
+	trainingLevel->actions = 2;
+	trainingLevel->actionList = (MDLActions*)malloc(sizeof(MDLActions)*trainingLevel->actions);
+	trainingLevel->actionList[0].action = 1;
+	trainingLevel->actionList[0].sourceObject = "NULL\0";
+	trainingLevel->actionList[0].targetObject = "OutBox\0";
+
+	trainingLevel->actionList[1].action = 3;
+	trainingLevel->actionList[1].sourceObject = "Platform\0";//"NULL\0";
+	trainingLevel->actionList[1].targetObject = "Platform\0";
 
 	//make sure set the PSP does not go to
 	//idle mode if the analog stick is moved
@@ -180,6 +201,13 @@ void ClMagicBowlApp::exit(){
 	}
 	//cleanup menu
 	if (mainMenu) delete(mainMenu);
+	if (trainingLevel->actions > 0){
+		//for (unsigned short a = 0; a < trainingLevel->actions; a++){
+			//free(trainingLevel->actionList[a].sourceObject);
+			//free(trainingLevel->actionList[a].targetObject);
+		//}
+		free(trainingLevel->actionList);
+	}
 	delete(trainingLevel);
 	ClMp3Helper::closeMP3();
 }
@@ -190,7 +218,7 @@ ClMagicBowlApp::ClMagicBowlApp() {
 }
 
 void ClMagicBowlApp::render(){
-	int fade;
+	int fade, loadBarLen;
 	SceCtrlData pad;
 	short menuState;
 	int mp4Res;
@@ -345,11 +373,28 @@ void ClMagicBowlApp::render(){
 		if (!currentLevel){
 			currLevelId = 0xffff;
 			currentLevel = new ClLevel(*trainingLevel, this);//levelData[currLevelId-1], this);//
-			currentLevel->initLevel();
+			currentLevel->initLevel(this->playerInfo.triggerFlipped);
 		}
+		if (loadingTex == 0){
+				loadingTex = textureMgr->loadFromPNG(trainingLevel->loadImage);
+		} else
+			this->blendTextureToScreen(loadingTex, 0xff);
+		loadBarLen = (150*currentLevel->getInitProgress() / 100);
+
+		blendFrameToScreen(170, 251, loadBarLen, 2, 0xeedf7777);
+		blendFrameToScreen(170, 252, loadBarLen, 9, 0xeedf2222);
+		blendFrameToScreen(170, 261, loadBarLen, 3, 0xeedf0000);
 		if (currentLevel->getLevelState() == MBL_INIT_SUCCESS) {
 			//if successfully loaded start the level, or wait for a key pressed ?
-			currentState = MBA_RUN_LEVEL;
+			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 350, 260);
+			sceCtrlPeekBufferPositive(&pad, 1);
+			if (pad.Buttons && pad.Buttons & PSP_CTRL_CROSS){
+				currentState = MBA_RUN_LEVEL;
+				loadingTex = 0;
+				if (introMusicId)
+						ClMp3Helper::stopMP3(introMusicId);
+				introMusicId = ClMp3Helper::playMP3("snd/Training.mp3", 0x5000);
+			};
 		}
 		break;
 	/*
@@ -357,15 +402,30 @@ void ClMagicBowlApp::render(){
 	 * that the user need to wait some time
 	 */
 	case MBA_LOAD_LEVEL:
+		//TODO:
+		//display level specific image with something like a mission during loading
+		//start the level based on button state
 		textHelper->writeText(SERIF_SMALL_REGULAR, "load level...", 200,100);
+		if (loadingTex == 0){
+				loadingTex = textureMgr->loadFromPNG(levelData[currLevelId-1].loadImage);
+		} else
+			this->blendTextureToScreen(loadingTex, 0xff);
+		loadBarLen = (150*currentLevel->getInitProgress() / 100);
 
+		blendFrameToScreen(170, 251, loadBarLen, 2, 0xeedf7777);
+		blendFrameToScreen(170, 252, loadBarLen, 9, 0xeedf2222);
+		blendFrameToScreen(170, 261, loadBarLen, 3, 0xeedf0000);
 		if (!currentLevel) {
 			currentLevel = new ClLevel(levelData[currLevelId-1], this);
-			currentLevel->initLevel();
+			currentLevel->initLevel(this->playerInfo.triggerFlipped);
 		}
 
 		if (currentLevel->getLevelState() == MBL_INIT_SUCCESS) {
-			currentState = MBA_RUN_LEVEL;
+			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 350, 260);
+			sceCtrlPeekBufferPositive(&pad, 1);
+			if (pad.Buttons && pad.Buttons & PSP_CTRL_CROSS){
+				currentState = MBA_RUN_LEVEL;
+			}
 		}
 		break;
 	case MBA_RUN_LEVEL:
@@ -373,6 +433,37 @@ void ClMagicBowlApp::render(){
 		short lvlState;
 		lvlState = currentLevel->getLevelState();
 		switch (lvlState){
+		case MBL_INGAME_MENU:
+			//render the level, and blend in game menu over it
+			currentLevel->render(playerInfo.red_cyan);
+			if (!levelInGameMenu) {
+				//setup the main menu
+				levelInGameMenu = new ClSimpleMenu(100, 100);
+				//create the items
+				ClSimpleMenuItem* item;
+				item = new ClSimpleMenuItem("Continue", MBL_INIT_SUCCESS);
+				levelInGameMenu->addItem(item);
+				item = new ClSimpleMenuItem("Restart Level", MBL_TASK_FAILED);
+				levelInGameMenu->addItem(item);
+				item = new ClSimpleMenuItem("Leave Level", MBA_MAIN_MENU);
+				levelInGameMenu->addItem(item);
+			}
+			blendFrameToScreen(0, 0, 480, 270, 0x99000000);
+			textHelper->writeText(SANSERIF_BOLD   ,"Level Paused", 100, 80);
+			menuState = levelInGameMenu->handleMenu();
+			if (menuState>=0){
+				if (menuState == MBA_MAIN_MENU){
+					currentState = MBA_MAIN_MENU;
+					delete(currentLevel);
+					currentLevel=0;
+				}
+				else
+					currentLevel->setLevelState((LevelStates)menuState);
+
+				delete(levelInGameMenu);
+				levelInGameMenu = 0;
+			}
+			break;
 		case MBL_INIT_SUCCESS:
 			currentLevel->render(playerInfo.red_cyan);//render3D);
 			break;
@@ -580,6 +671,14 @@ void ClMagicBowlApp::render(){
 				item = new ClSimpleMenuItem("Enable 3D", MBA_OPT_ENABLE_3D);
 			else
 				item = new ClSimpleMenuItem("Disable 3D", MBA_OPT_DISABLE_3D);
+
+			optionMenu->addItem(item);
+
+			if (!playerInfo.triggerFlipped)
+				item = new ClSimpleMenuItem("Flip Trigger Rotation", MBA_OPT_TRIGGER_FLIPPED);
+			else
+				item = new ClSimpleMenuItem("Reset Trigger Rotation", MBA_OPT_TRIGGER_NORMAL);
+
 			optionMenu->addItem(item);
 			item = new ClSimpleMenuItem("Main Menu", MBA_MAIN_MENU);
 			optionMenu->addItem(item);
@@ -602,6 +701,18 @@ void ClMagicBowlApp::render(){
 		}
 		if (menuState == MBA_OPT_DISABLE_3D){
 			playerInfo.red_cyan = false;
+			//if leaving the menu destroy the same
+			delete(optionMenu);
+			optionMenu = 0;
+		}
+		if (menuState == MBA_OPT_TRIGGER_FLIPPED){
+			playerInfo.triggerFlipped = true;
+			//if leaving the menu destroy the same
+			delete(optionMenu);
+			optionMenu = 0;
+		}
+		if (menuState == MBA_OPT_TRIGGER_NORMAL){
+			playerInfo.triggerFlipped = false;
 			//if leaving the menu destroy the same
 			delete(optionMenu);
 			optionMenu = 0;
@@ -661,27 +772,6 @@ void ClMagicBowlApp::initRenderTarget(){
 	//fovFlip = fovFlip?false:true;
 }
 
-/*
-ClMagicBowlApp::ApplicationStates ClMagicBowlApp::handleMainMenu(){
-	SceCtrlData pad;
-
-	//get inputs from the pad
-	sceCtrlPeekBufferPositive(&pad, 1);
-	//button pressed ?
-	if (pad.Buttons != 0){
-		if (pad.Buttons & PSP_CTRL_CROSS){
-			//if we have the cross we need to switch
-			//to the next state from the main menu
-			//this will be ....
-			timer->reset();
-			return MBA_PREPARE_MAIN_MENU;
-		}
-	}
-
-	//if nothing was done just return the current state
-	return currentState;
-}
-*/
 
 void ClMagicBowlApp::blendTextureToScreen(monzoom::Texture *texture, short  alpha){
 	blendTextureToScreen(texture, 0, 0, 480, 272, alpha);
@@ -746,12 +836,12 @@ void ClMagicBowlApp::blendFrameToScreen(short  x, short  y, short  width, short 
 	vertex = (ColorIVertex*)sceGuGetMemory(sizeof(ColorIVertex)*2);
 	vertex[0].x = x;
 	vertex[0].y = y;
-	vertex[0].z = 0;
+	vertex[0].z = 0xffff;
 	vertex[0].color = color;
 
 	vertex[1].x = x+width;
 	vertex[1].y = y+height;
-	vertex[1].z = 0;
+	vertex[1].z = 0xffff;
 	vertex[1].color = color;
 
 	sceGuDisable(GU_DEPTH_TEST);

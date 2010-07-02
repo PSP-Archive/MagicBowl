@@ -5,7 +5,7 @@ OBJS = $(patsubst %.cpp,%.o,$(SOURCES))
 
 INCDIR =
 CFLAGS = -G0 -Wall -g 
-CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
+CXXFLAGS = $(CFLAGS) -fno-exceptions #-fno-rtti
 ASFLAGS = $(CFLAGS)
 BUILD_PRX = 1
 

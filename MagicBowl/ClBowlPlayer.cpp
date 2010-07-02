@@ -13,7 +13,9 @@ extern "C"{
 #include <pspgum.h>
 }
 #include "ClBowlPlayer.h"
+#include "ClAnimatedSceneObject.h"
 #include <ClVectorHelper.h>
+#include <typeinfo>
 
 using namespace monzoom;
 
@@ -257,13 +259,14 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 		return 0;
 }
 
-ScePspFVector4* ClBowlPlayer::getPosition() const{
-	return (ScePspFVector4*)&pos;
+const ScePspFVector4* ClBowlPlayer::getPosition(){
+	return &pos;
 }
 
 void ClBowlPlayer::render(){
 	float rSin, rCos,r1Cos, roll;
 	Material material;
+	ScePspFMatrix4 *rot;
 
 	sceGumMatrixMode(GU_MODEL);
 	sceGumLoadIdentity();
@@ -299,12 +302,14 @@ void ClBowlPlayer::render(){
 				 {0.0f, 0.0f, 0.0f, 1.0f}
 				};
 		//apply rotation matrix
-		ScePspFMatrix4 rot;
-		gumMultMatrix(&rot, &rotMatrix, &rollMatrix);
-		ClVectorHelper::normalize(&rot.x);
-		ClVectorHelper::normalize(&rot.y);
-		ClVectorHelper::normalize(&rot.z);
-		rollMatrix = rot;
+		rot = (ScePspFMatrix4*)memalign(16, sizeof(ScePspFMatrix4));
+		gumMultMatrix(rot, &rotMatrix, &rollMatrix);
+		/*
+		ClVectorHelper::normalize(&rot->x);
+		ClVectorHelper::normalize(&rot->y);
+		ClVectorHelper::normalize(&rot->z);*/
+		rollMatrix = *rot;
+		free(rot);
 	}
 	sceGumMultMatrix(&rollMatrix);
 	int i = 0;
@@ -315,7 +320,7 @@ void ClBowlPlayer::render(){
 		monzoom::ClMaterialColor* mat = getMaterial();
 		if (mat){
 			sceGuColor(mat->getColor());
-
+			sceGuModelColor(0x00111111, mat->getColor(), mat->getColor(), 0x00000000);
 			if (mat->getType() == 1){
 				//it is a texture material
 				ClMaterialTexture* tex = (ClMaterialTexture*)mat;
@@ -338,6 +343,7 @@ void ClBowlPlayer::render(){
 		sceGuFrontFace(GU_CCW);
 		sceGumDrawArray(GU_TRIANGLES,GU_TEXTURE_32BITF |GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, meshList[m].vertexCount, 0, meshList[m].mesh);
 		sceGuFrontFace(GU_CW);
+		sceGuModelColor(0x00000000, 0x00000000, 0x00000000, 0x00000000);
 	}
 }
 
@@ -352,7 +358,9 @@ bool ClBowlPlayer::collisionDetection(CollisionInfo* collInfo, ScePspFVector4* d
 
 	//check all objects, first check myself is near enough, meaning inside the
 	//bounding spheres
-	ScePspFVector4* tPos;
+	const ScePspFVector4* tPos;
+	const ScePspFVector4* oPos;
+
 	for (int t=0;t<objectList.size();t++){
 		//do not check against the outbox and my self
 		if (strcmp(objectList[t]->getName(), "OutBox") == 0
@@ -373,6 +381,14 @@ bool ClBowlPlayer::collisionDetection(CollisionInfo* collInfo, ScePspFVector4* d
 			vector<monzoom::ClSceneObject::Mesh>* meshList = objectList[t]->getMesh();
 			int objectTriangles = (*meshList)[0].vertexCount / 3;
 			skipTriangle = false;
+			//in case the object is an animated one we need to retrieve the relative
+			//position
+			const char* className = typeid(*objectList[t]).name();
+			if (strstr(className, "ClAnimatedSceneObject") != 0){
+				oPos = ((ClAnimatedSceneObject*)objectList[t])->getOriginalPosition();
+			}
+			else
+				oPos = 0;
 			for (int triangle=0;triangle<objectTriangles && !skipTriangle;triangle++){
 				//create a plane out of this triangle
 				tr1.x = (*meshList)[0].mesh[triangle*3].x;
@@ -384,6 +400,17 @@ bool ClBowlPlayer::collisionDetection(CollisionInfo* collInfo, ScePspFVector4* d
 				tr3.x = (*meshList)[0].mesh[triangle*3+2].x;
 				tr3.y = (*meshList)[0].mesh[triangle*3+2].y;
 				tr3.z =	(*meshList)[0].mesh[triangle*3+2].z;
+				if (oPos){
+					tr1.x += tPos->x - oPos->x;
+					tr1.y += tPos->y - oPos->y;
+					tr1.z += tPos->z - oPos->z;
+					tr2.x += tPos->x - oPos->x;
+					tr2.y += tPos->y - oPos->y;
+					tr2.z += tPos->z - oPos->z;
+					tr3.x += tPos->x - oPos->x;
+					tr3.y += tPos->y - oPos->y;
+					tr3.z += tPos->z - oPos->z;
+				}
 				//it is possible that the mesh contains dummy triangles
 				//they are thin and at leats two points are the same
 				//this triangles should not be considered for collision detection
@@ -391,6 +418,9 @@ bool ClBowlPlayer::collisionDetection(CollisionInfo* collInfo, ScePspFVector4* d
 					ClVectorHelper::equal(&tr1, &tr3) ||
 					ClVectorHelper::equal(&tr2, &tr3)) {
 				} else {
+					//if this triangle is part of an animated object we may need
+					//to apply the changed object position to the triangle points which are static by nature
+
 					bool lastFoundColl = collInfo->foundColl;
 					collInfo->foundColl = false;
 					checkTriangle(collInfo, &tr1, &tr2,&tr3, direction);

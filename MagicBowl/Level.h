@@ -37,6 +37,7 @@ class ClMagicBowlApp;
 typedef enum LevelStates {
 	MBL_INITIALIZING = 0,
 	MBL_INIT_SUCCESS = 1,
+	MBL_INGAME_MENU = 2,
 	MBL_INIT_FAILED = 99,
 	MBL_TASK_FAILED = 10,
 	MBL_TASK_FINISHED = 11,
@@ -53,6 +54,7 @@ typedef struct MDLActions{
 
 typedef struct MDLFileData{
 	char* objectFile;
+	char* loadImage;
 	float gravity;
 	float bowlPosX, bowlPosY, bowlPosZ;
 	float lightPosX, lightPosY, lightPosZ;
@@ -76,7 +78,7 @@ public:
 	/*
 	 * will start the asynch initialization
 	 */
-	void initLevel();
+	void initLevel(bool triggerFlipped);
 
 	/*
 	 * render the current level
@@ -86,9 +88,19 @@ public:
 	virtual ~ClLevel();
 
 	/*
+	 * returns initializing progress from 0 to 100
+	 */
+	int getInitProgress();
+
+	/*
 	 * returns the current Level State
 	 */
 	LevelStates getLevelState();
+
+	/* set the current state
+	 *
+	 */
+	void setLevelState(LevelStates newState);
 
 protected:
 	/*
@@ -100,6 +112,7 @@ protected:
 		ClLevel* level;
 	};
 	LevelStates currentState;
+	int initProgress;
 	bool firstRender; //indicates the first time the level will be rendered
 	Texture* timerTex;
 
@@ -115,6 +128,7 @@ protected:
 	bool switchSoundPlaying;
 	float viewAngle,r3dAngle;
 	float viewDistance;
+	float viewAngleChange;
 	ScePspFVector3 camPos;
 
 	struct LevelPhysics {
