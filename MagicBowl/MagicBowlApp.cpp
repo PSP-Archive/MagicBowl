@@ -18,6 +18,7 @@ extern "C"{
 #include <string.h>
 #include <psptypes3d.h>
 #include <unistd.h>
+#include <psppower.h>
 }
 #include "MagicBowlApp.h"
 #include "Mp3Helper.h"
@@ -54,6 +55,9 @@ ClMagicBowlApp *ClMagicBowlApp::get_instance(){
 }
 
 bool ClMagicBowlApp::init(){
+	//reduce the color depth to gain some performance boost
+	this->initParams.gu_PSM = GU_PSM_8888;
+	this->initParams.gu_WaitVblank = false;
 	if (!Cl3dHomebrew::init()) return false;
 	//open the Config file to get the Level Descriptions
 	FILE* file;
@@ -120,7 +124,7 @@ bool ClMagicBowlApp::init(){
 	//setup the text helper
 	textHelper = clTextHelper::getInstance();
 	//setup the initial state
-	currentState = MBA_LOAD_PART1;//MBA_MAIN_MENU;//
+	currentState = MBA_MAIN_MENU;//MBA_LOAD_PART1;//MBA_MAIN_MENU;//
 	currentLevel = 0;
 	//setup the timer
 	timer = new ClSimpleTimer();
@@ -158,12 +162,12 @@ bool ClMagicBowlApp::init(){
 	trainingLevel->lightPosX = 0.0f;
 	trainingLevel->lightPosY = 20.0f;
 	trainingLevel->lightPosZ = -5.0f;
-	trainingLevel->gravity = 0.1f;
+	trainingLevel->gravity = 1.9f;//0.1f;
 	trainingLevel->lightColor = 0xffffffff;
 	trainingLevel->maxTime = 999.0f;
 	trainingLevel->objectFile = "data/Training.mon\0";
-	trainingLevel->loadImage = "intro.png\0";
-	trainingLevel->actions = 2;
+	trainingLevel->loadImage = "Training.png\0";
+	trainingLevel->actions = 4;
 	trainingLevel->actionList = (MDLActions*)malloc(sizeof(MDLActions)*trainingLevel->actions);
 	trainingLevel->actionList[0].action = 1;
 	trainingLevel->actionList[0].sourceObject = "NULL\0";
@@ -173,12 +177,28 @@ bool ClMagicBowlApp::init(){
 	trainingLevel->actionList[1].sourceObject = "Platform\0";//"NULL\0";
 	trainingLevel->actionList[1].targetObject = "Platform\0";
 
+	trainingLevel->actionList[2].action = 3;
+	trainingLevel->actionList[2].sourceObject = "Fahrstuhl\0";//"NULL\0";
+	trainingLevel->actionList[2].targetObject = "Fahrstuhl\0";
+
+	trainingLevel->actionList[3].action = 1;
+	trainingLevel->actionList[3].sourceObject = "NULL\0";
+	trainingLevel->actionList[3].targetObject = "Fahrstuhl\0";
+
 	//make sure set the PSP does not go to
 	//idle mode if the analog stick is moved
 	sceCtrlSetIdleCancelThreshold(64, 100);
 
 	int mp4Res = ClMp4Decoder::init("/mods/mpeg_vsh370.prx");
 	render3D = false;
+
+	//do init some GU stuff different from HBC
+	Cl3dHomebrew::startGu();
+	this->initRenderTarget();
+	Cl3dHomebrew::finishGu();
+
+	//set PSP to maximum speed, this cost lots of battery but is needed for maximum performance...
+	scePowerSetClockFrequency(333, 333, 166);
 	return true;
 }
 
@@ -352,6 +372,7 @@ void ClMagicBowlApp::render(){
 		}
 		blendTextureToScreen(mainMenuTex, 0x88);
 		menuState = mainMenu->handleMenu();
+
 		//if we have executed a Menu item we act on the selected one
 		//this mean switching the application state
 		if (menuState > 0) currentState = (ApplicationStates)menuState;
@@ -386,14 +407,14 @@ void ClMagicBowlApp::render(){
 		blendFrameToScreen(170, 261, loadBarLen, 3, 0xeedf0000);
 		if (currentLevel->getLevelState() == MBL_INIT_SUCCESS) {
 			//if successfully loaded start the level, or wait for a key pressed ?
-			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 350, 260);
+			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 300, 260);
 			sceCtrlPeekBufferPositive(&pad, 1);
 			if (pad.Buttons && pad.Buttons & PSP_CTRL_CROSS){
 				currentState = MBA_RUN_LEVEL;
 				loadingTex = 0;
-				if (introMusicId)
-						ClMp3Helper::stopMP3(introMusicId);
-				introMusicId = ClMp3Helper::playMP3("snd/Training.mp3", 0x5000);
+				//if (introMusicId)
+					//	ClMp3Helper::stopMP3(introMusicId);
+				//introMusicId = ClMp3Helper::playMP3("snd/Training.mp3", 0x5000);
 			};
 		}
 		break;
@@ -421,7 +442,7 @@ void ClMagicBowlApp::render(){
 		}
 
 		if (currentLevel->getLevelState() == MBL_INIT_SUCCESS) {
-			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 350, 260);
+			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 300, 260);
 			sceCtrlPeekBufferPositive(&pad, 1);
 			if (pad.Buttons && pad.Buttons & PSP_CTRL_CROSS){
 				currentState = MBA_RUN_LEVEL;
@@ -473,7 +494,7 @@ void ClMagicBowlApp::render(){
 			currentState = MBA_LEVEL_FAILED;
 			//display animation of failed level, blocks current thread...
 			//which is as expected ;o)
-			ClMp4Decoder::playMp4("img/lvlFail.mp4", PSP_CTRL_CROSS);
+			ClMp4Decoder::playMp4("img/lvlFail.mp4", 0);//, PSP_DISPLAY_PIXEL_FORMAT_565);
 			timer->reset();
 			break;
 		case MBL_TASK_FINISHED:
@@ -768,7 +789,11 @@ void ClMagicBowlApp::initRenderTarget(){
 	sceGumMatrixMode(GU_PROJECTION);
 	sceGumLoadIdentity();
 	//flipping the FOV to simulate anti aliasing
-	sceGumPerspective(45.0f+0.25f*fovFlip, 480.0f/272.0f, 1.0f, 500.0f);
+	sceGumPerspective(45.0f+0.25f*fovFlip, 480.0f/272.0f, 10.0f, 1500.0f);
+
+	//sceGuDisable(GU_CLIP_PLANES);
+	//sceGuEnable(GU_LINE_SMOOTH);
+	//sceGuEnable(GU_PATCH_FACE);
 	//fovFlip = fovFlip?false:true;
 }
 
@@ -810,7 +835,7 @@ void ClMagicBowlApp::blendTextureToScreen(monzoom::Texture *texture,short x, sho
 		vertex[0].color = 0x00ffffff | ((alpha & 255) << 24);
 
 		vertex[1].x = x+w+slice;
-		vertex[1].y = height;
+		vertex[1].y = y+height;
 		vertex[1].z = 0x00ff;
 		vertex[1].u = w+slice;
 		vertex[1].v = height;

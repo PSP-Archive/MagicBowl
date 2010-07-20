@@ -3,6 +3,8 @@
 	<name>MagicBowl</name>
 	<comment></comment>
 	<projects>
+		<project>PSPHomebrewCommon</project>
+		<project>PSPMz2GuLib</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

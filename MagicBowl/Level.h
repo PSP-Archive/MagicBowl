@@ -115,6 +115,7 @@ protected:
 	int initProgress;
 	bool firstRender; //indicates the first time the level will be rendered
 	Texture* timerTex;
+	Texture* manaTex;
 
 	monzoom::ClSceneMgr* levelScene; //the 3D scene of this level
 	ClBowlPlayer* sBowl;

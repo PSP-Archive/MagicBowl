@@ -39,6 +39,7 @@ ClBowlPlayer::ClBowlPlayer(ScePspFVector4* centralPos, float radius, ClSceneObje
 	collInfo.collPlane = 0;
 	collInfo.collTime = 0.0f;
 	collInfo.nearestDistance = 999999999.0f;
+	collInfo.lastCollObject = 0;
 	//initialize the roll animation of the bowl
 	rollAxis.x = rollAxis.y = rollAxis.z = 0.0f;
 	gumLoadIdentity(&rollMatrix);
@@ -84,7 +85,7 @@ void ClBowlPlayer::generateMesh(short degrees_of_segments, float radius){
 			if (mesh.mesh[vertex].u < 0.0f) mesh.mesh[vertex].u += 1.0f;
 			//if we are close to 360° the u component goes from closely 1 back to 0
 			//this results in texture cracks, we need to avoid this
-			if(la>350 && mesh.mesh[vertex].u < 0.75) mesh.mesh[vertex].u += 1.0f;
+			if(la>=(360-degrees_of_segments) && mesh.mesh[vertex].u < 0.75) mesh.mesh[vertex].u += 1.0f;
 			mesh.mesh[vertex].v = (asinf(ey)/GU_PI) + 0.5f;
 
 			ex = sinf(la*GU_PI/180.0f)*sinf((ha+degrees_of_segments)*GU_PI/180.0f);
@@ -101,7 +102,7 @@ void ClBowlPlayer::generateMesh(short degrees_of_segments, float radius){
 
 			mesh.mesh[vertex+1].u = (atan2f(ex, ez)/(GU_PI*2));
 			if (mesh.mesh[vertex+1].u < 0.0f) mesh.mesh[vertex+1].u += 1.0f;
-			if(la>350 && mesh.mesh[vertex+1].u < 0.75) mesh.mesh[vertex+1].u += 1.0f;
+			if(la>=(360-degrees_of_segments) && mesh.mesh[vertex+1].u < 0.75) mesh.mesh[vertex+1].u += 1.0f;
 			mesh.mesh[vertex+1].v = (asinf(ey)/GU_PI) + 0.5f;
 
 			ex = sinf((la+degrees_of_segments)*GU_PI/180.0f)*sinf(ha*GU_PI/180.0f);
@@ -122,7 +123,7 @@ void ClBowlPlayer::generateMesh(short degrees_of_segments, float radius){
 			if (mesh.mesh[vertex+2].u < 0.0f) mesh.mesh[vertex+2].u += 1.0f;
 			//if we are close to 360° the u component goes from closely 1 back to 0
 			//this results in texture cracks, we need to avoid this
-			if(la>350 && mesh.mesh[vertex+2].u < 0.75) mesh.mesh[vertex+2].u += 1.0f;
+			if(la>=(360-degrees_of_segments) && mesh.mesh[vertex+2].u < 0.75) mesh.mesh[vertex+2].u += 1.0f;
 			mesh.mesh[vertex+2].v = (asinf(ey)/GU_PI) + 0.5f;
 
 			mesh.mesh[vertex+3] = mesh.mesh[vertex+1];
@@ -145,7 +146,7 @@ void ClBowlPlayer::generateMesh(short degrees_of_segments, float radius){
 			if (mesh.mesh[vertex+4].u < 0.0f) mesh.mesh[vertex+4].u += 1.0f;
 			//if we are close to 360° the u component goes from closely 1 back to 0
 			//this results in texture cracks, we need to avoid this
-			if(la>350 && mesh.mesh[vertex+4].u < 0.75) mesh.mesh[vertex+4].u += 1.0f;
+			if(la>=(360-degrees_of_segments) && mesh.mesh[vertex+4].u < 0.75) mesh.mesh[vertex+4].u += 1.0f;
 			mesh.mesh[vertex+4].v = (asinf(ey)/GU_PI) + 0.5f;
 
 			mesh.mesh[vertex+5] = mesh.mesh[vertex+2];
@@ -163,8 +164,8 @@ void ClBowlPlayer::applyAcceleration(short  padX, short  padY, ScePspFMatrix4* v
 	//has no impact
 	if (padX == 1 || padX == -1) padX = 0;
 	if (padY == 1 || padY == -1) padY = 0;
-	this->accelX = (float)padX / 5.0f;
-	this->accelZ = (float)padY / 5.0f;
+	this->accelX = (float)padX / 2.0f;
+	this->accelZ = (float)padY / 2.0f;
 
 	//calculate the worldspace movement into X and Z direction dependent
 	//on the view matrix. we are translating pure axis movement into
@@ -195,7 +196,7 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 	//and any acceleration to the bowl
 
 	//if we are currently not on plane, set gravity
-	acceleration.y += -gravity/10.0f;//10.0f;
+	acceleration.y -= gravity/40.0f;//10.0f;
 	//acceleration.x = acceleration.z = 0.0f;
 	if (collInfo.foundColl){
 		//the orientation of the touching plane would change the movements of the stick
@@ -210,9 +211,27 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 			worldMoveZ.y = (-collInfo.collPlane->normal.x*worldMoveZ.x - collInfo.collPlane->normal.z*worldMoveZ.z)/collInfo.collPlane->normal.y;
 		}
 		//add the stick movement to the current direction
-		direction.x += (worldMoveX.x*accelX + worldMoveZ.x*accelZ)/30.0f;
-		direction.y += (worldMoveX.y*accelX + worldMoveZ.y*accelZ)/30.0f;
-		direction.z += (worldMoveX.z*accelX + worldMoveZ.z*accelZ)/30.0f;
+		direction.x += (worldMoveX.x*accelX + worldMoveZ.x*accelZ)/40.0f;
+		direction.y += (worldMoveX.y*accelX + worldMoveZ.y*accelZ)/40.0f;
+		direction.z += (worldMoveX.z*accelX + worldMoveZ.z*accelZ)/40.0f;
+
+/*		//if the touched object is an animated one the object movement will impact the bowl movement
+		const char* className = typeid(*collInfo.collObject).name();
+		if (strstr(className, "ClAnimatedSceneObject") != 0){
+			//if the object is an animated one we apply the object movement to the bowl as well
+			const ScePspFVector4* oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
+			//if we touched this object the first time get the direction a second time to initialize the
+			//direction "delta" if the object was already in move bevore we have touched it
+			if (collInfo.lastCollObject != collInfo.collObject){
+				oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
+				collInfo.lastCollObject = collInfo.collObject;
+			}
+			//add this direction to the bowl movement
+			pos.x += oDir->x;
+			pos.y += oDir->y;
+			pos.z += oDir->z;
+		}
+		*/
 	}
 	direction.x+= acceleration.x;
 	direction.y+= acceleration.y;
@@ -229,7 +248,7 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 	}
 	if (this->collisionDetection(&collInfo, &direction, this->world->getChilds())){
 
-		collisionHandling(&collInfo);
+		collisionHandling(&collInfo, gravity);
 		//now check a second time whether the new pos and direction will
 		//result again in a collision
 		//store the current result
@@ -237,7 +256,7 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 		if (this->collisionDetection(&collInfo, &direction, this->world->getChilds())){
 			//again there is a collision occured
 			//handle this one
-			collisionHandling(&collInfo);
+			collisionHandling(&collInfo, gravity);
 		} else {
 			//no collision, just restore the default value
 			collInfo = lastCollInfo;
@@ -247,16 +266,52 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 		ClVectorHelper::crossProduct(&rollAxis, &direction, &collInfo.collPlane->normal);
 	}
 	{
-		// move to the next position
+		// move to the next position but slow down the movement a small peace each time
 		ClVectorHelper::scale(&direction, 1.0f-0.015f);
 		pos.x += direction.x;
 		pos.y += direction.y;
 		pos.z += direction.z;
 	}
-	if (collInfo.foundColl)
+	if (collInfo.foundColl){
+		//if the touched object is an animated one the object movement will impact the bowl movement
+		const char* className = typeid(*collInfo.collObject).name();
+		if (strstr(className, "ClAnimatedSceneObject") != 0){
+			//if the object is an animated one we apply the object movement to the bowl as well
+			const ScePspFVector4* oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
+			//if we touched this object the first time get the direction a second time to initialize the
+			//direction "delta" if the object was already in move bevore we have touched it
+			if (collInfo.lastCollObject != collInfo.collObject)
+				oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
+			//add this direction to teh bowl position
+			pos.x += oDir->x;
+			pos.y += oDir->y;
+			pos.z += oDir->z;
+		}
+		if (collInfo.collObject != collInfo.lastCollObject)
+			collInfo.lastCollObject = collInfo.collObject;
 		return collInfo.collObject;
-	else
+	}
+	else {
+		//if (collInfo.collObject != collInfo.lastCollObject)
+		//currently there is no collision any more
+		//if the last collision object was an animated one we need to check whether we need to move the bowl
+		//with this object as it is just moving down (the bowl is lying on it)
+		if (collInfo.lastCollObject){
+			const char* className = typeid(*collInfo.lastCollObject).name();
+			if (strstr(className, "ClAnimatedSceneObject") != 0){
+				const ScePspFVector4* oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
+				//do we have a movement on y direction ?
+				if (oDir->y < 0.0f){
+					//set the bowl position based on the movement of the animated object
+					pos.y += oDir->y;
+					pos.x += oDir->x;
+					pos.z += oDir->z;
+				}
+			}
+		}
+		collInfo.lastCollObject = 0;//collInfo.collObject;
 		return 0;
+	}
 }
 
 const ScePspFVector4* ClBowlPlayer::getPosition(){
@@ -324,6 +379,8 @@ void ClBowlPlayer::render(){
 			if (mat->getType() == 1){
 				//it is a texture material
 				ClMaterialTexture* tex = (ClMaterialTexture*)mat;
+				ClTextureMgr::getInstance()->useTexture(tex->getTexture());
+				/*
 				sceGuEnable(GU_TEXTURE_2D);
 				sceGuTexMapMode(GU_TEXTURE_COORDS,0,0);//GU_TEXTURE_MATRIX, 0, 0); //texture mapping using matrix instead u, v
 				sceGuTexProjMapMode(GU_UV); //texture mapped based on the position of the objects relative to the texture
@@ -335,6 +392,7 @@ void ClBowlPlayer::render(){
 				sceGuTexFunc(GU_TFX_MODULATE,GU_TCC_RGBA);//apply RGBA value of texture
 				sceGuTexFilter(GU_LINEAR,GU_LINEAR); //interpolate to have smooth borders
 				sceGuTexWrap(GU_REPEAT,GU_REPEAT); //do repeat the texture if necessary
+				*/
 			} else
 				sceGuDisable(GU_TEXTURE_2D);
 		} else
@@ -363,7 +421,7 @@ bool ClBowlPlayer::collisionDetection(CollisionInfo* collInfo, ScePspFVector4* d
 
 	for (int t=0;t<objectList.size();t++){
 		//do not check against the outbox and my self
-		if (strcmp(objectList[t]->getName(), "OutBox") == 0
+		if (strstr(objectList[t]->getName(), "OutBox") != 0
 			|| objectList[t] == this
 			|| objectList[t]->getState()!= SOS_VISIBLE) continue;
 		//the distance of the two objects is the length of
@@ -629,7 +687,7 @@ void ClBowlPlayer::checkTriangle(CollisionInfo *collInfo, ScePspFVector4 *tr1, S
 	}
 }
 
-void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo){
+void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo, float gravityValue){
 	//we now knew the triangle which we collide with and have already moved
 	//to the collision point, now do the collision response step
 	//move to the collision point (but only very close to and not exactly)
@@ -675,7 +733,7 @@ void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo){
 		float speed = ClVectorHelper::length(&direction);
 		if (speed > 0.0f){
 			//we assume first that the movement continue in Z and X
-			//direction and dependen on the plane orientation
+			//direction and dependent on the plane orientation
 			//we will calculate the Y value.
 			//TODO: if we collide with a "senkrecht" wall this would
 			//      lead to divide by zero ....
@@ -685,7 +743,7 @@ void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo){
 			    && 0.00001f >= collInfo->collPlane->normal.y ){
 				newDir.x = 0.0f;
 				newDir.z = 0.0f;
-				newDir.y = 0.0f;
+				newDir.y = -gravityValue/80.0f;
 			} else {
 				newDir.x = direction.x;
 				newDir.z = direction.z;

@@ -74,7 +74,7 @@ ClLevel::ClLevel(MDLFileData levelData, ClMagicBowlApp* app) {
 
 	firstRender = true;
 	viewAngle = 0.0f;
-	r3dAngle = 1.25f;
+	r3dAngle = 0.75;//1.25f;
 	viewDistance = 80.0f;
 
 	initProgress = 0;
@@ -156,7 +156,7 @@ void ClLevel::render(bool red_cyan){
 
 		//set the ambient color a bit brighter if rendered using 3D
 		if (red_cyan){
-			levelScene->setAmbientLight(0xffaaaaaa);
+			levelScene->setAmbientLight(0xff999999);
 		}
 	}
 	//initialize the timer
@@ -171,7 +171,7 @@ void ClLevel::render(bool red_cyan){
 	if (currentState != MBL_INGAME_MENU){
 		if (timer->getDeltaSeconds() >= 0.025f) {
 			//move the bowl dependent on the physics
-			touchObject = sBowl->move(physics.gravity);
+			touchObject = sBowl->move(9.81f);//physics.gravity);
 			timer->reset();
 
 			//as we have moved the bowl now, check if we have collision with
@@ -217,22 +217,22 @@ void ClLevel::render(bool red_cyan){
 	//set the camera of the scene looking at the bowl
 	levelScene->getActiveCamera()->setViewMatrix(&viewM);
 
-	//first render the scene from light point of view
-	//using a different z-Buffer
-
 	//render the scene from camera point of view
 	//using default settings
 	//render the scene normal
 	//in the case we would like to have red/cyan we set the render target to be offscreen
 	const void* ptr = (void *)0x154000;
-	const void* offScreen = (void*)((int)sceGeEdramGetAddr() + (int)ptr);
+	const void* offScreen;
 	if (red_cyan){
-		sceGuDrawBufferList(GU_PSM_8888, (void*)ptr, 512); //offscreen = 512x512
+		offScreen = (void*)((int)sceGeEdramGetAddr() + (int)ptr);
+		sceGuDrawBufferList(GU_PSM_5650, (void*)ptr, 512); //offscreen = 512x512
 		sceGuClearColor(0xff000000);
 		sceGuClearDepth(0);
 		sceGuClear(GU_COLOR_BUFFER_BIT|GU_DEPTH_BUFFER_BIT);
 	}
+
 	levelScene->render();
+
 	//in case of red_cyan we need to pass the offscreen onto screen and render the scene a second
 	//time with a bit different camera position
 	if (red_cyan){
@@ -241,7 +241,7 @@ void ClLevel::render(bool red_cyan){
 		//setup default rendering onto screen
 		ClMagicBowlApp::initRenderTarget();
 		//clear screen
-		sceGuClearColor(0xff000000);
+		sceGuClearColor(0xffffffff);
 		sceGuClearDepth(0);
 		sceGuClear(GU_COLOR_BUFFER_BIT|GU_DEPTH_BUFFER_BIT);
 		//2. render the texture across the whole screen with a color filter for cyan
@@ -261,7 +261,7 @@ void ClLevel::render(bool red_cyan){
 		gumTranslate(&viewM, &lookAt);
 		levelScene->getActiveCamera()->setViewMatrix(&viewM);
 		//3. second run into offscreen
-		sceGuDrawBufferList(GU_PSM_8888, (void*)ptr, 512); //offscreen = 512x512
+		sceGuDrawBufferList(GU_PSM_5650, (void*)ptr, 512); //offscreen = 512x512
 		sceGuClearColor(0xff000000);
 		sceGuClearDepth(0);
 		sceGuClear(GU_COLOR_BUFFER_BIT|GU_DEPTH_BUFFER_BIT);
@@ -323,12 +323,23 @@ void ClLevel::render(bool red_cyan){
 		currentState = MBL_TASK_FAILED;
 		return;
 	}
-	int barLen = (145*timeLeft / maxTime);
-	app->blendFrameToScreen(175, 1, barLen, 2, 0xee7777df);
+
+	int barLen = (130*timeLeft / maxTime);
+	/*app->blendFrameToScreen(175, 1, barLen, 2, 0xee7777df);
 	app->blendFrameToScreen(175, 2, barLen, 9, 0xee2222df);
 	app->blendFrameToScreen(175, 11, barLen, 3, 0xee0000df);
-
 	app->blendTextureToScreen(timerTex, 150, 0, 180, 15, 0xff);
+	*/
+	app->blendFrameToScreen(4, 215-barLen, 2, barLen, 0xee7777df);
+	app->blendFrameToScreen(6, 215-barLen, 9, barLen, 0xee2222df);
+	app->blendFrameToScreen(15, 215-barLen, 3, barLen, 0xee0000df);
+	app->blendTextureToScreen(timerTex, 3, 80, 16, 150, 0xff);
+
+	app->blendTextureToScreen(manaTex, 19, 80, 16, 150, 0xff);
+	app->blendFrameToScreen(2, 235, 50, 35, 0x990044bb);
+	clTextHelper::getInstance()->writeText(SERIF_SMALL_REGULAR, "Level:",5, 250);
+	clTextHelper::getInstance()->writeText(SERIF_SMALL_REGULAR, "Points:",5, 260);
+
 	/*
 	 * once the scene is completely rendered draw some other stuff
 	 */
@@ -345,6 +356,7 @@ void ClLevel::render(bool red_cyan){
 		}
 		//trigger event for this object if registered
 		ClEventManager::triggerEvent(touchObject);
+
 	}
 	//if the bowl position falls underneath -50 than we have failed the level
 	if (bowlPos->y < -100.0f){
@@ -427,8 +439,8 @@ void ClLevel::handlePad(){
 	sceCtrlPeekBufferPositive(&pad, 1);
 	//the analog stick returns 0 for top, 255 for down
 	//0 for left and 255 for right
-	padX = (pad.Lx - 127) >> 4;
-	padY = (pad.Ly - 127) >> 4;
+	padX = (pad.Lx - 127) >> 5;
+	padY = (pad.Ly - 127) >> 5;
 	// as the pad's movement directions mapped into the
 	//world space are dependend on the current view we first
 	//get the ViewMatrix and pass it to the apply function
@@ -449,8 +461,8 @@ void ClLevel::handlePad(){
 		}
 		if (pad.Buttons & PSP_CTRL_DOWN){
 			viewDistance+= 0.5f;
-			if (viewDistance>=100.0f)
-				viewDistance = 100.0f;
+			if (viewDistance>=1000.0f)
+				viewDistance = 1000.0f;
 		}
 /*
 		if (pad.Buttons & PSP_CTRL_RIGHT){
@@ -477,7 +489,7 @@ void ClLevel::drawOffscreen2Screen(unsigned int color, const void* offScreenPtr)
 	//use offscreen as texture
 	sceGuEnable(GU_TEXTURE_2D);
 	sceGuTexImage(0, 512, 512, 512, offScreenPtr);
-	sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+	sceGuTexMode(GU_PSM_5650, 0, 0, 0);
 	sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
 	sceGuTexFilter(GU_NEAREST, GU_NEAREST);
 	sceGuEnable(GU_BLEND);
@@ -686,7 +698,7 @@ int ClLevel::initThread(SceSize args, void *argp){
 	level->initProgress = 25;
 	//load the 3D Level Objects from Monzoom file and init the
 	//scene
-	level->levelScene = new monzoom::ClSceneMgr();
+	level->levelScene = ClSceneMgr::getInstance();
 	level->levelScene->loadSceneFromMON(level->lvlFileData.objectFile);
 
 	//add additional object to the scene
@@ -701,7 +713,8 @@ int ClLevel::initThread(SceSize args, void *argp){
 
 	level->initProgress = 50;
 
-	level->timerTex = ClTextureMgr::getInstance()->loadFromPNG("Timer.png");
+	level->timerTex = ClTextureMgr::getInstance()->loadFromPNG("Timer2.png");
+	level->manaTex = ClTextureMgr::getInstance()->loadFromPNG("Mana.png");
 
 	sceKernelDelayThread(500000);
 

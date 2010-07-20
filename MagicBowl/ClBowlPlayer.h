@@ -46,13 +46,14 @@ protected:
 		ScePspFVector4 collPoint;
 		ClTrianglePlane* collPlane;
 		ClSceneObject* collObject;
+		ClSceneObject* lastCollObject;
 	}CollisionInfo;
 
 	CollisionInfo collInfo;
 
 	void generateMesh(short degrees_of_segments, float radius);
 	bool collisionDetection(CollisionInfo* collInfo, ScePspFVector4* direction, vector<monzoom::ClSceneObject*> objectList);
-	void collisionHandling(CollisionInfo* collInfo);
+	void collisionHandling(CollisionInfo* collInfo, float gravityValue);
 	void checkTriangle(CollisionInfo* collInfo, ScePspFVector4* tr1, ScePspFVector4* tr2, ScePspFVector4* tr3, ScePspFVector4* direction);
 	bool getLowestRoot(float a, float b, float c, float maxR, float* root);
 private:
