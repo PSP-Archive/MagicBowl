@@ -289,6 +289,8 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 		}
 		if (collInfo.collObject != collInfo.lastCollObject)
 			collInfo.lastCollObject = collInfo.collObject;
+
+		updateRotation();
 		return collInfo.collObject;
 	}
 	else {
@@ -310,8 +312,10 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 			}
 		}
 		collInfo.lastCollObject = 0;//collInfo.collObject;
+		updateRotation();
 		return 0;
 	}
+
 }
 
 const ScePspFVector4* ClBowlPlayer::getPosition(){
@@ -331,6 +335,7 @@ void ClBowlPlayer::render(){
 	renderPos.z = pos.z;
 
 	sceGumTranslate(&renderPos);
+	/*
 	//in addition to the movement of the bowl we need to rotate the same
 	//for this we have the rotation axis in place
 	//check for the rotation axis
@@ -359,13 +364,9 @@ void ClBowlPlayer::render(){
 		//apply rotation matrix
 		rot = (ScePspFMatrix4*)memalign(16, sizeof(ScePspFMatrix4));
 		gumMultMatrix(rot, &rotMatrix, &rollMatrix);
-		/*
-		ClVectorHelper::normalize(&rot->x);
-		ClVectorHelper::normalize(&rot->y);
-		ClVectorHelper::normalize(&rot->z);*/
 		rollMatrix = *rot;
 		free(rot);
-	}
+	}*/
 	sceGumMultMatrix(&rollMatrix);
 	int i = 0;
 	//running through all meshes
@@ -790,6 +791,50 @@ bool ClBowlPlayer::getLowestRoot(float a, float b, float c, float maxR, float *r
 	//if neither r1 nor r2, there is no solution
 	return false;
 }
+
+void ClBowlPlayer::updateRotation(){
+	//in addition to the movement of the bowl we need to rotate the same
+	//for this we have the rotation axis in place
+	//check for the rotation axis
+	//calculate rotation matrix every time the bowl moves...
+	float rSin, rCos,r1Cos, roll;
+	ScePspFMatrix4 *rot;
+	roll = ClVectorHelper::length(&rollAxis);
+
+	if (roll > 0.0001f){
+		//the real roll length is the length of the
+		//direction vector
+		//360°/2PI*r = roll°/direction.lenght
+		//roll° = 360°*direction.lenght/2PI*r
+		//roll_rad = 360°*dir.l*PI/180°*2PI*r
+		//roll_rad =dir.l/r
+
+		roll  = ClVectorHelper::length(&direction)/boundingSphere;
+		ClVectorHelper::normalize(&rollAxis);
+
+		rSin = sinf(roll);
+		rCos = cosf(roll);
+		r1Cos = 1 - rCos;
+		ScePspFMatrix4 rotMatrix =
+				{{rollAxis.x*rollAxis.x*(r1Cos)+rCos, rollAxis.x*rollAxis.y*(r1Cos)-rollAxis.z*rSin, rollAxis.x*rollAxis.z*(r1Cos)+rollAxis.y*rSin, 0.0f},
+				 {rollAxis.x*rollAxis.y*(r1Cos)+rollAxis.z*rSin, rollAxis.y*rollAxis.y*(r1Cos)+rCos, rollAxis.y*rollAxis.z*(r1Cos)-rollAxis.x*rSin, 0.0f},
+				 {rollAxis.x*rollAxis.z*(r1Cos)-rollAxis.y*rSin, rollAxis.y*rollAxis.z*(r1Cos)+rollAxis.x*rSin, rollAxis.z*rollAxis.z*(r1Cos)+rCos, 0.0f},
+				 {0.0f, 0.0f, 0.0f, 1.0f}
+				};
+		//apply rotation matrix
+		rot = (ScePspFMatrix4*)memalign(16, sizeof(ScePspFMatrix4));
+		gumMultMatrix(rot, &rotMatrix, &rollMatrix);
+		/*
+		ClVectorHelper::normalize(&rot->x);
+		ClVectorHelper::normalize(&rot->y);
+		ClVectorHelper::normalize(&rot->z);*/
+		rollMatrix = *rot;
+		free(rot);
+	}
+
+}
+
+
 
 
 

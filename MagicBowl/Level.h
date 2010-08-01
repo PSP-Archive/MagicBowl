@@ -55,6 +55,7 @@ typedef struct MDLActions{
 typedef struct MDLFileData{
 	char* objectFile;
 	char* loadImage;
+	char* shortInfo;
 	float gravity;
 	float bowlPosX, bowlPosY, bowlPosZ;
 	float lightPosX, lightPosY, lightPosZ;
@@ -83,7 +84,7 @@ public:
 	/*
 	 * render the current level
 	 */
-	void render(bool red_cyan = false);
+	void render(short red_cyan = 0);
 
 	virtual ~ClLevel();
 

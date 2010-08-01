@@ -50,7 +50,7 @@ typedef struct UserState{
 	short maxLevel; //the last level the player has succeeded
 	unsigned int points;
 	unsigned int mana;
-	bool red_cyan;
+	short red_cyan;
 	bool triggerFlipped;
 }UserState;
 
@@ -86,6 +86,7 @@ public:
 		MBA_SHOW_CREDITS,
 		MBA_SHOW_OPTIONS,
 		MBA_OPT_ENABLE_3D,
+		MBA_OPT_ENABLE_3D_2,
 		MBA_OPT_DISABLE_3D,
 		MBA_OPT_TRIGGER_NORMAL,
 		MBA_OPT_TRIGGER_FLIPPED

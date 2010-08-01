@@ -108,7 +108,7 @@ void ClLevel::initLevel(bool triggerFlipped) {
 ClLevel::~ClLevel() {
 	// TODO Auto-generated destructor stub
 	delete(timer);
-	delete(levelScene);
+	ClSceneMgr::freeInstance();
 	if (timerTex)
 		ClTextureMgr::getInstance()->freeTexture(timerTex->id);
 }
@@ -138,7 +138,7 @@ bool ClLevel::SceneSortPredicate(monzoom::ClSceneObject* o1, monzoom::ClSceneObj
 	}
 
 }
-void ClLevel::render(bool red_cyan){
+void ClLevel::render(short red_cyan){
 	//if the renderer was called the first time
 	//do some on-time stuff only valid at this point
 	if (firstRender){
@@ -245,7 +245,11 @@ void ClLevel::render(bool red_cyan){
 		sceGuClearDepth(0);
 		sceGuClear(GU_COLOR_BUFFER_BIT|GU_DEPTH_BUFFER_BIT);
 		//2. render the texture across the whole screen with a color filter for cyan
-		this->drawOffscreen2Screen(0xffff9f00, offScreen);
+		//red/cay or green/pink
+		if (red_cyan == 1)
+			this->drawOffscreen2Screen(0x7fffff00, offScreen);
+		else
+			this->drawOffscreen2Screen(0x7fff00ff, offScreen);
 
 		sceGuEnable(GU_LIGHTING);
 		gumLoadIdentity(&viewM);
@@ -276,7 +280,10 @@ void ClLevel::render(bool red_cyan){
 		sceGuClearDepth(0);
 		sceGuClear(GU_DEPTH_BUFFER_BIT);
 		//4.render the texture across the whole screen with a color filter for red and 50% transparency
-		this->drawOffscreen2Screen(0x7f0000ff, offScreen);
+		if (red_cyan == 1)
+			this->drawOffscreen2Screen(0x7f0000ff, offScreen);
+		else
+			this->drawOffscreen2Screen(0x7f00ff00, offScreen);
 	}
 	/*
 	//now map screen points into worldspace and from

@@ -17,7 +17,7 @@ EXTRA_TARGETS = EBOOT.PBP
 PSP_EBOOT_TITLE = PSP MagicBowl
 PSP_EBOOT_ICON=ICON0.PNG
 PSP_LARGE_MEM=1
-PSP_FW_VERSION=300
+PSP_FW_VERSION=550
 
 PSPSDK=$(shell psp-config --pspsdk-path)
 include $(PSPSDK)/lib/build.mak

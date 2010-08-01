@@ -124,7 +124,7 @@ bool ClMagicBowlApp::init(){
 	//setup the text helper
 	textHelper = clTextHelper::getInstance();
 	//setup the initial state
-	currentState = MBA_MAIN_MENU;//MBA_LOAD_PART1;//MBA_MAIN_MENU;//
+	currentState = MBA_LOAD_PART1;//MBA_MAIN_MENU;//
 	currentLevel = 0;
 	//setup the timer
 	timer = new ClSimpleTimer();
@@ -167,6 +167,7 @@ bool ClMagicBowlApp::init(){
 	trainingLevel->maxTime = 999.0f;
 	trainingLevel->objectFile = "data/Training.mon\0";
 	trainingLevel->loadImage = "Training.png\0";
+	trainingLevel->shortInfo = "There is an easy and a more difficult way to survive this level. Try out how it works and what you are able to do. You may need it in the compitions coming next...";
 	trainingLevel->actions = 4;
 	trainingLevel->actionList = (MDLActions*)malloc(sizeof(MDLActions)*trainingLevel->actions);
 	trainingLevel->actionList[0].action = 1;
@@ -390,7 +391,6 @@ void ClMagicBowlApp::render(){
 	case MBA_LOAD_TRAINING:
 		//while loading the level we will show some level descriptions
 		//and a screen of the level may be ?
-		textHelper->writeText(SERIF_SMALL_REGULAR, "load training mode...", 200,100);
 		if (!currentLevel){
 			currLevelId = 0xffff;
 			currentLevel = new ClLevel(*trainingLevel, this);//levelData[currLevelId-1], this);//
@@ -400,14 +400,21 @@ void ClMagicBowlApp::render(){
 				loadingTex = textureMgr->loadFromPNG(trainingLevel->loadImage);
 		} else
 			this->blendTextureToScreen(loadingTex, 0xff);
+
+		//display the description, not part of the image to be open for multi language support ;o)
+		textHelper->writeTextBlock(SANSERIF_SMALL_REGULAR, trainingLevel->shortInfo, 105, 190, 250);
 		loadBarLen = (150*currentLevel->getInitProgress() / 100);
+
+		blendFrameToScreen(170, 251, 150, 2, 0xee111111);
+		blendFrameToScreen(170, 252, 150, 9, 0xee3d3d3d);
+		blendFrameToScreen(170, 261, 150, 3, 0xee717171);
 
 		blendFrameToScreen(170, 251, loadBarLen, 2, 0xeedf7777);
 		blendFrameToScreen(170, 252, loadBarLen, 9, 0xeedf2222);
 		blendFrameToScreen(170, 261, loadBarLen, 3, 0xeedf0000);
 		if (currentLevel->getLevelState() == MBL_INIT_SUCCESS) {
 			//if successfully loaded start the level, or wait for a key pressed ?
-			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 300, 260);
+			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 180, 262);
 			sceCtrlPeekBufferPositive(&pad, 1);
 			if (pad.Buttons && pad.Buttons & PSP_CTRL_CROSS){
 				currentState = MBA_RUN_LEVEL;
@@ -427,25 +434,32 @@ void ClMagicBowlApp::render(){
 		//display level specific image with something like a mission during loading
 		//start the level based on button state
 		textHelper->writeText(SERIF_SMALL_REGULAR, "load level...", 200,100);
-		if (loadingTex == 0){
-				loadingTex = textureMgr->loadFromPNG(levelData[currLevelId-1].loadImage);
-		} else
-			this->blendTextureToScreen(loadingTex, 0xff);
-		loadBarLen = (150*currentLevel->getInitProgress() / 100);
-
-		blendFrameToScreen(170, 251, loadBarLen, 2, 0xeedf7777);
-		blendFrameToScreen(170, 252, loadBarLen, 9, 0xeedf2222);
-		blendFrameToScreen(170, 261, loadBarLen, 3, 0xeedf0000);
 		if (!currentLevel) {
 			currentLevel = new ClLevel(levelData[currLevelId-1], this);
 			currentLevel->initLevel(this->playerInfo.triggerFlipped);
 		}
 
+		if (loadingTex == 0){
+				loadingTex = textureMgr->loadFromPNG(levelData[currLevelId-1].loadImage);
+		} else
+			this->blendTextureToScreen(loadingTex, 0xff);
+
+		blendFrameToScreen(170, 251, 150, 2, 0xee111111);
+		blendFrameToScreen(170, 252, 150, 9, 0xee3d3d3d);
+		blendFrameToScreen(170, 261, 150, 3, 0xee717171);
+
+		loadBarLen = (150*currentLevel->getInitProgress() / 100);
+
+		blendFrameToScreen(170, 251, loadBarLen, 2, 0xeedf7777);
+		blendFrameToScreen(170, 252, loadBarLen, 9, 0xeedf2222);
+		blendFrameToScreen(170, 261, loadBarLen, 3, 0xeedf0000);
+
 		if (currentLevel->getLevelState() == MBL_INIT_SUCCESS) {
-			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 300, 260);
+			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 180, 262);
 			sceCtrlPeekBufferPositive(&pad, 1);
 			if (pad.Buttons && pad.Buttons & PSP_CTRL_CROSS){
 				currentState = MBA_RUN_LEVEL;
+				loadingTex = 0;
 			}
 		}
 		break;
@@ -689,7 +703,9 @@ void ClMagicBowlApp::render(){
 			//create the items
 			ClSimpleMenuItem* item;
 			if (!playerInfo.red_cyan)
-				item = new ClSimpleMenuItem("Enable 3D", MBA_OPT_ENABLE_3D);
+				item = new ClSimpleMenuItem("Enable 3D (cyan)", MBA_OPT_ENABLE_3D);
+			else if (playerInfo.red_cyan == 1)
+				item = new ClSimpleMenuItem("Enable 3D (green)", MBA_OPT_ENABLE_3D_2);
 			else
 				item = new ClSimpleMenuItem("Disable 3D", MBA_OPT_DISABLE_3D);
 
@@ -715,7 +731,13 @@ void ClMagicBowlApp::render(){
 			optionMenu = 0;
 		}
 		if (menuState == MBA_OPT_ENABLE_3D){
-			playerInfo.red_cyan = true;
+			playerInfo.red_cyan = 1;
+			//if leaving the menu destroy the same
+			delete(optionMenu);
+			optionMenu = 0;
+		}
+		if (menuState == MBA_OPT_ENABLE_3D_2){
+			playerInfo.red_cyan = 2;
 			//if leaving the menu destroy the same
 			delete(optionMenu);
 			optionMenu = 0;

@@ -56,6 +56,7 @@ protected:
 	void collisionHandling(CollisionInfo* collInfo, float gravityValue);
 	void checkTriangle(CollisionInfo* collInfo, ScePspFVector4* tr1, ScePspFVector4* tr2, ScePspFVector4* tr3, ScePspFVector4* direction);
 	bool getLowestRoot(float a, float b, float c, float maxR, float* root);
+	void updateRotation();
 private:
 	ClSceneObject* world; //master object representing the world - and all objects in it
 	float accelX, accelZ; //acceleration set by the user actions
