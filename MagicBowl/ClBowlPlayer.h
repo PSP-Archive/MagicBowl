@@ -25,6 +25,8 @@ public:
 	 */
 	void applyAcceleration(short padX, short padY, ScePspFMatrix4* viewMatrix);
 
+	void applyBoost(float boost);
+
 	/*
 	 * move the bowl, this will also do the collision detection
 	 * and response calculation
@@ -35,6 +37,9 @@ public:
 	const ScePspFVector4 * getPosition();
 
 	virtual void render();
+
+	void doShadow(std::vector<ClSceneLight*>* lightList);
+	void castShadowVolume(ScePspFVector4* lightPos);
 
 protected:
 	//definition of data provided by collision detection

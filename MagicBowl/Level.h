@@ -70,6 +70,8 @@ typedef struct ActionData{
 	EventId event;
 }ActionData;
 
+#define MAX_MANA 5000
+
 class ClLevel {
 public:
 	/*

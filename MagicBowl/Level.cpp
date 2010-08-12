@@ -78,6 +78,7 @@ ClLevel::ClLevel(MDLFileData levelData, ClMagicBowlApp* app) {
 	viewDistance = 80.0f;
 
 	initProgress = 0;
+	this->app = app;
 }
 
 void ClLevel::initLevel(bool triggerFlipped) {
@@ -86,9 +87,9 @@ void ClLevel::initLevel(bool triggerFlipped) {
 	 * some initialization not necessarily need to be performed in a seperate thread
 	 */
 	if (triggerFlipped)
-		this->viewAngleChange = -1.0f;
+		this->viewAngleChange = -1.25f;
 	else
-		this->viewAngleChange = 1.0f;
+		this->viewAngleChange = 1.25f;
 
 	/*
 	 * setup and start init thread for asynchronous initialization...
@@ -171,7 +172,7 @@ void ClLevel::render(short red_cyan){
 	if (currentState != MBL_INGAME_MENU){
 		if (timer->getDeltaSeconds() >= 0.025f) {
 			//move the bowl dependent on the physics
-			touchObject = sBowl->move(9.81f);//physics.gravity);
+			touchObject = sBowl->move(physics.gravity);//9.81f);//physics.gravity);
 			timer->reset();
 
 			//as we have moved the bowl now, check if we have collision with
@@ -179,6 +180,10 @@ void ClLevel::render(short red_cyan){
 			if (touchObject){
 				if (strcmp(touchObject->getName(), "Plane_Target")==0){
 					currentState = MBL_TASK_FINISHED;
+					//the time finished before end will be added as MANA
+					app->playerInfo.mana+= (maxTime - runTime->getDeltaSeconds())*100;
+					if (app->playerInfo.mana > MAX_MANA)
+						app->playerInfo.mana = MAX_MANA;
 					return;
 				}
 			}
@@ -203,15 +208,18 @@ void ClLevel::render(short red_cyan){
 	//place the camera free around the bowl
 	//looking at the same
 	gumLoadIdentity(&viewM);
-	if (red_cyan)
+	//if (red_cyan)
 		//rotate the camera by 1.0 degrees
-		gumRotateY(&viewM,GU_PI*(-r3dAngle)/180.0f);
+		//gumRotateY(&viewM,GU_PI*(-r3dAngle)/180.0f);
 	//keep a distance to the bowl
 	gumTranslate(&viewM, &camPos);
 	//rotate on X axis by 15°
 	gumRotateX(&viewM, 50.0f*GU_PI/180.0f);
 	//rotate by viewAngle on Y axis
-	gumRotateY(&viewM, viewAngle*GU_PI/180.0f);
+	if (red_cyan)
+		gumRotateY(&viewM, (viewAngle-r3dAngle)*GU_PI/180.0f);
+	else
+		gumRotateY(&viewM, viewAngle*GU_PI/180.0f);
 	//move to the bowl position after all
 	gumTranslate(&viewM, &lookAt);
 	//set the camera of the scene looking at the bowl
@@ -225,7 +233,7 @@ void ClLevel::render(short red_cyan){
 	const void* offScreen;
 	if (red_cyan){
 		offScreen = (void*)((int)sceGeEdramGetAddr() + (int)ptr);
-		sceGuDrawBufferList(GU_PSM_5650, (void*)ptr, 512); //offscreen = 512x512
+		sceGuDrawBufferList(GU_PSM_8888, (void*)ptr, 512); //offscreen = 512x512
 		sceGuClearColor(0xff000000);
 		sceGuClearDepth(0);
 		sceGuClear(GU_COLOR_BUFFER_BIT|GU_DEPTH_BUFFER_BIT);
@@ -241,31 +249,33 @@ void ClLevel::render(short red_cyan){
 		//setup default rendering onto screen
 		ClMagicBowlApp::initRenderTarget();
 		//clear screen
-		sceGuClearColor(0xffffffff);
+		sceGuClearColor(0xff000000);
 		sceGuClearDepth(0);
 		sceGuClear(GU_COLOR_BUFFER_BIT|GU_DEPTH_BUFFER_BIT);
 		//2. render the texture across the whole screen with a color filter for cyan
 		//red/cay or green/pink
 		if (red_cyan == 1)
-			this->drawOffscreen2Screen(0x7fffff00, offScreen);
+			//this->drawOffscreen2Screen(0xbfe7b600, offScreen);
+			this->drawOffscreen2Screen(0xffffff00, offScreen);
 		else
-			this->drawOffscreen2Screen(0x7fff00ff, offScreen);
+			//this->drawOffscreen2Screen(0xbfe700b6, offScreen);
+			this->drawOffscreen2Screen(0xffff00ff, offScreen);
 
 		sceGuEnable(GU_LIGHTING);
 		gumLoadIdentity(&viewM);
 		//rotate the camera by 1.0 degrees
-		gumRotateY(&viewM,GU_PI*r3dAngle/180.0f);
+		//gumRotateY(&viewM,GU_PI*r3dAngle/180.0f);
 		//keep a distance to the bowl
 		gumTranslate(&viewM, &camPos);
 		//rotate on X axis by 15°
 		gumRotateX(&viewM, 50.0f*GU_PI/180.0f);
 		//rotate by viewAngle on Y axis
-		gumRotateY(&viewM, viewAngle*GU_PI/180.0f);
+		gumRotateY(&viewM, (viewAngle+r3dAngle)*GU_PI/180.0f);
 		//move to the bowl position after all
 		gumTranslate(&viewM, &lookAt);
 		levelScene->getActiveCamera()->setViewMatrix(&viewM);
 		//3. second run into offscreen
-		sceGuDrawBufferList(GU_PSM_5650, (void*)ptr, 512); //offscreen = 512x512
+		sceGuDrawBufferList(GU_PSM_8888, (void*)ptr, 512); //offscreen = 512x512
 		sceGuClearColor(0xff000000);
 		sceGuClearDepth(0);
 		sceGuClear(GU_COLOR_BUFFER_BIT|GU_DEPTH_BUFFER_BIT);
@@ -280,47 +290,17 @@ void ClLevel::render(short red_cyan){
 		sceGuClearDepth(0);
 		sceGuClear(GU_DEPTH_BUFFER_BIT);
 		//4.render the texture across the whole screen with a color filter for red and 50% transparency
-		if (red_cyan == 1)
+		if (red_cyan == 1){
+			//this->drawOffscreen2Screen(0x7f0000bf, offScreen);
+			//sceGuPixelMask(0xff0000ff);
 			this->drawOffscreen2Screen(0x7f0000ff, offScreen);
-		else
+			//sceGuPixelMask(0x0);
+		}else{
+			//this->drawOffscreen2Screen(0x7f00bf00, offScreen);
 			this->drawOffscreen2Screen(0x7f00ff00, offScreen);
-	}
-	/*
-	//now map screen points into worldspace and from
-	//there into light view, if the point would be visible
-	//from the light point of view, it is lit otherwise
-	//in shadow
-	//get reverse matrix to go from screen to world
-	ScePspFMatrix4 proj, view, unMap;
-	sceGumMatrixMode(GU_PROJECTION);
-	sceGumStoreMatrix(&proj);
-	sceGumMatrixMode(GU_VIEW);
-	sceGumStoreMatrix(&view);
-	gumMultMatrix(&unMap, &proj, &view);
-	gumFullInverse(&unMap, &unMap);
-
-
-
-	unsigned short* zbufPtr = (unsigned short*)((int)sceGeEdramGetAddr() + (int)0x110000 + 0x600000);
-
-	//now unproject each point from the screen
-	for (int y = 0; y<272; y++){
-		for (int x=0;x<480;x++){
-			//just use zbuffPtr with X as the pointer will be increased each run
-			if (zbufPtr[x]==0) continue;
-			//project screen back to world
-			ScePspFVector4 scrPoint = {x*(2.0f/480.0f)-1.0f,
-					                   1.0f-y*(2.0f/272.0f),
-					                   1.0f-zbufPtr[x]/32768.0f,
-					                   0.0f};
-			ScePspFVector4 wrldPoint;
-			ClVectorHelper::vectorMulMatrix(&wrldPoint, &scrPoint, &unMap);
-
-			int dummy = 1;
 		}
-		zbufPtr+=512;
+
 	}
-	*/
 	/*
 	 * at the very end we render the level state stuff
 	 */
@@ -332,21 +312,31 @@ void ClLevel::render(short red_cyan){
 	}
 
 	int barLen = (130*timeLeft / maxTime);
-	/*app->blendFrameToScreen(175, 1, barLen, 2, 0xee7777df);
+	app->blendFrameToScreen(175, 1, barLen, 2, 0xee7777df);
 	app->blendFrameToScreen(175, 2, barLen, 9, 0xee2222df);
 	app->blendFrameToScreen(175, 11, barLen, 3, 0xee0000df);
 	app->blendTextureToScreen(timerTex, 150, 0, 180, 15, 0xff);
-	*/
+/*
 	app->blendFrameToScreen(4, 215-barLen, 2, barLen, 0xee7777df);
 	app->blendFrameToScreen(6, 215-barLen, 9, barLen, 0xee2222df);
 	app->blendFrameToScreen(15, 215-barLen, 3, barLen, 0xee0000df);
 	app->blendTextureToScreen(timerTex, 3, 80, 16, 150, 0xff);
-
+*/
+	barLen = (130*app->playerInfo.mana / MAX_MANA);
+/*	app->blendFrameToScreen(20, 215-barLen, 2, barLen, 0xeedf77df);
+	app->blendFrameToScreen(22, 215-barLen, 9, barLen, 0xeedf22df);
+	app->blendFrameToScreen(31, 215-barLen, 3, barLen, 0xeedf00df);
 	app->blendTextureToScreen(manaTex, 19, 80, 16, 150, 0xff);
+	*/
+	app->blendFrameToScreen(4, 215-barLen, 2, barLen, 0xeedf77df);
+	app->blendFrameToScreen(6, 215-barLen, 9, barLen, 0xeedf22df);
+	app->blendFrameToScreen(15, 215-barLen, 3, barLen, 0xeedf00df);
+	app->blendTextureToScreen(manaTex, 3, 80, 16, 150, 0xff);
+/*
 	app->blendFrameToScreen(2, 235, 50, 35, 0x990044bb);
 	clTextHelper::getInstance()->writeText(SERIF_SMALL_REGULAR, "Level:",5, 250);
 	clTextHelper::getInstance()->writeText(SERIF_SMALL_REGULAR, "Points:",5, 260);
-
+*/
 	/*
 	 * once the scene is completely rendered draw some other stuff
 	 */
@@ -485,6 +475,15 @@ void ClLevel::handlePad(){
 		if (pad.Buttons & PSP_CTRL_RTRIGGER){
 			viewAngle-= viewAngleChange;
 		}
+
+		if(pad.Buttons & PSP_CTRL_CIRCLE){
+			//activate some speed boost if enough mana exist
+			if (app->playerInfo.mana > 0){
+				app->playerInfo.mana--;
+				sBowl->applyBoost(2.0f);
+			}
+
+		}
 	}
 }
 
@@ -496,11 +495,12 @@ void ClLevel::drawOffscreen2Screen(unsigned int color, const void* offScreenPtr)
 	//use offscreen as texture
 	sceGuEnable(GU_TEXTURE_2D);
 	sceGuTexImage(0, 512, 512, 512, offScreenPtr);
-	sceGuTexMode(GU_PSM_5650, 0, 0, 0);
+	sceGuTexMode(GU_PSM_8888, 0, 0, 0);
 	sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
 	sceGuTexFilter(GU_NEAREST, GU_NEAREST);
 	sceGuEnable(GU_BLEND);
 	sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+	//sceGuBlendFunc(GU_SUBTRACT, GU_SRC_COLOR, GU_FIX, 0, color);
 	sceGuDisable(GU_DEPTH_TEST);
 	sceGuDisable(GU_LIGHTING);
 	//render the texture across the whole screen
@@ -543,14 +543,14 @@ void ClLevel::renderPassBowlNormal(){
 
 void ClLevel::renderPassObjectsShadowReciever(ScePspFMatrix4* lightProj,ScePspFMatrix4* lightView){
 	//now setup the texture derived from the shadowmap
-	const void* ptr = (void *)0x154000;
+	const void* ptr = (void *)0x48AA88;
 	const void* offScreen = (void*)((int)sceGeEdramGetAddr() + (int)ptr);
 
 	sceGuEnable(GU_TEXTURE_2D);
 	sceGuTexMapMode(GU_TEXTURE_MATRIX, 0, 0); //texture mapping using matrix instead u, v
 	sceGuTexProjMapMode(GU_POSITION); //texture mapped based on the position of the objects relative to the texture
 
-	sceGuTexMode(GU_PSM_4444, 0,0,0);
+	sceGuTexMode(GU_PSM_5650, 0,0,0);
 	sceGuTexImage(0,256,256,256, offScreen);
 	sceGuTexFunc(GU_TFX_REPLACE,GU_TCC_RGB);//only apply RGB value of texture
 	sceGuTexFilter(GU_LINEAR,GU_LINEAR); //interpolate to have smooth borders
@@ -578,6 +578,8 @@ void ClLevel::renderPassObjectsShadowReciever(ScePspFMatrix4* lightProj,ScePspFM
 
 	sceGumMatrixMode(GU_MODEL);
 	sceGumLoadIdentity();
+
+	levelScene->render();
 	/*unsigned int szeneObjects = guList.objectCount;//szene->getObjectCount();
 	for (unsigned int i=0;i<szeneObjects;i++){
 		ClMzGu3dObject* object = guList.guObjects[i];
@@ -633,9 +635,9 @@ void ClLevel::renderPassBowlShadowCast(ScePspFVector4* bowlPos, ScePspFMatrix4* 
 	 * now we want to render from there to the offscreen buffer.
 	 * setup the static offscreen pointer for this call
 	 */
-	const void* ptr = (void *)0x154000;
+	const void* ptr = (void *)0x48AA88;
 	const void* offScreen = (void*)((int)sceGeEdramGetAddr() + (int)ptr);
-	sceGuDrawBufferList(GU_PSM_4444, (void*)ptr, 256); //shadow map will be 128x128
+	sceGuDrawBufferList(GU_PSM_5650, (void*)ptr, 256); //shadow map will be 128x128
 
 	//the viewport size need to fit the offscreen size which is 128x128
 	sceGuOffset(2048 - 128,2048 - 128);
@@ -696,11 +698,11 @@ int ClLevel::initThread(SceSize args, void *argp){
 	level->runTime = new ClSimpleTimer();
 	level->maxTime = level->lvlFileData.maxTime;
 
-	level->physics.gravity = level->lvlFileData.gravity; //0.5 units per sec gravity
+	level->physics.gravity = level->lvlFileData.gravity;
 
 	level->camPos.x = level->camPos.y = level->camPos.z = 0.0f;
 	//delay the current thread to allow main thread continuing
-	sceKernelDelayThread(500000);//half a second
+	sceKernelDelayThread(10000);//half a second
 
 	level->initProgress = 25;
 	//load the 3D Level Objects from Monzoom file and init the
@@ -710,20 +712,20 @@ int ClLevel::initThread(SceSize args, void *argp){
 
 	//add additional object to the scene
 	level->sBowl = new ClBowlPlayer(&bowlPos, 1.5f, level->levelScene);
-	monzoom::ClMaterialTexture* bowlTex = new monzoom::ClMaterialTexture();
+/*	monzoom::ClMaterialTexture* bowlTex = new monzoom::ClMaterialTexture();
 	bowlTex->setColor(0xffffffff);
 	bowlTex->setTexture(monzoom::ClTextureMgr::getInstance()->loadFromPNG("Bowl.png"));
-	level->sBowl->setMaterial(bowlTex);
+	level->sBowl->setMaterial(bowlTex);*/
 	level->levelScene->addStaticSceneObject(level->sBowl);
 	//delay the current thread to allow main thread continuing
-	sceKernelDelayThread(500000);//half a second
+	sceKernelDelayThread(50000);//half a second
 
 	level->initProgress = 50;
 
-	level->timerTex = ClTextureMgr::getInstance()->loadFromPNG("Timer2.png");
+	level->timerTex = ClTextureMgr::getInstance()->loadFromPNG("Timer.png");
 	level->manaTex = ClTextureMgr::getInstance()->loadFromPNG("Mana.png");
 
-	sceKernelDelayThread(500000);
+	sceKernelDelayThread(50000);
 
 	level->initProgress = 70;
 	//now setup the actions for good performance

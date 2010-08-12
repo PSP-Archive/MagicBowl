@@ -11,7 +11,13 @@ extern "C"{
 #include <string.h>
 #include <pspgu.h>
 #include <pspgum.h>
+#include <psptypes3d.h>
 }
+
+#include <MonzoomAPI.h>
+#include <ClMonzoomToGU.h>
+#include <ClAnimMaterialtexture.h>
+#include <ClMaterialTexture.h>
 #include "ClBowlPlayer.h"
 #include "ClAnimatedSceneObject.h"
 #include <ClVectorHelper.h>
@@ -51,6 +57,71 @@ ClBowlPlayer::~ClBowlPlayer() {
 }
 
 void ClBowlPlayer::generateMesh(short degrees_of_segments, float radius){
+	//load the mesh from a monzoom file
+	ClMonzoomFile *mzFile = new ClMonzoomFile("data/Bowl.mon");
+	std::vector<ClChunk*> objectList;
+	ClChunkDre2 *mzObject;
+	int objectCount;
+	float boundingSphereRadius;
+	unsigned int vertexCount;
+	NormalTexFVertex *mesh;
+	TriangleIdx* triangles;
+	ScePspFVector4 pos;
+	int i;
+
+	//search for the bowl object in this file
+	mzFile->getChunksByType(&objectList, &objectCount, "DRE2");
+	for(i = 0;i < objectList.size();i++){
+		mzObject = (ClChunkDre2*)(objectList[i]);
+		if (strcmp(mzObject->rge1->robj->name.str,"Bowl") == 0){
+			//load the mesh from this object
+			vertexCount = ClMonzoomToGU::createObjectMesh(&mesh, &triangles, &pos, &boundingSphereRadius, mzObject, mzFile);
+			this->setMesh(mesh, vertexCount, triangles);
+			//this->setPosition(pos);
+			this->setBoundingSphere(boundingSphereRadius);
+
+			if(mzObject->matBodyCount != 0){
+				// check for animated material (currently only the color component will
+				// be considered
+				std::vector<ColorAnimation> anim = ClMonzoomToGU::getMaterialColorAnimation(mzObject, mzFile);
+				if (!anim.empty()){
+					if (mzObject->matBodyList[0].text_obj_flag){
+						ClAnimMaterialTexture *texture = new ClAnimMaterialTexture();
+						texture->setTexture(ClMonzoomToGU::getMaterialTexture(mzObject, mzFile));
+						texture->setColor(ClMonzoomToGU::getMaterialColor(mzObject, mzFile));
+						texture->setAnimation(anim);
+						this->setMaterial(texture);
+					}else{
+						//this is an animated material, create an animated material
+						//object and set the animation data
+						ClAnimMaterialColor* material = new ClAnimMaterialColor();
+						material->setColor(ClMonzoomToGU::getMaterialColor(mzObject, mzFile));
+						material->setAnimation(anim);
+						this->setMaterial(material);
+					} //texture flag ?
+				}else{
+					if(mzObject->matBodyList[0].text_obj_flag){
+						ClMaterialTexture *texture = new ClMaterialTexture();
+						texture->setTexture(ClMonzoomToGU::getMaterialTexture(mzObject, mzFile));
+						texture->setColor(ClMonzoomToGU::getMaterialColor(mzObject, mzFile));
+						this->setMaterial(texture);
+					}else{
+						ClMaterialColor *material = new ClMaterialColor();
+						material->setColor(ClMonzoomToGU::getMaterialColor(mzObject, mzFile));
+						this->setMaterial(material);
+					} //texture flag ?
+				} //anim material?
+			}
+
+			break;
+		}
+	}
+
+	objectList.clear();
+	delete(mzFile);
+
+	return;
+/*
 	unsigned int      triangles = 0,
 					  vertexCount = 0,
 					  vertex = 0;
@@ -61,6 +132,7 @@ void ClBowlPlayer::generateMesh(short degrees_of_segments, float radius){
 	mesh.vertexCount = triangles*3;
 	//get memory
 	mesh.mesh = (NormalTexFVertex*)memalign(16, mesh.vertexCount*sizeof(NormalTexFVertex));
+	mesh.triangles = (TriangleIdx*)malloc(sizeof(TriangleIdx)*triangles);
 
 	float ex, ey, ez;
 
@@ -155,7 +227,14 @@ void ClBowlPlayer::generateMesh(short degrees_of_segments, float radius){
 		}
 	}
 
-	meshList.push_back(mesh);
+	//create the triangle index
+	for (int v=0;v<mesh.vertexCount;v++){
+		mesh.triangles[v/3].index[v%3] = v;
+	}
+
+	ClSceneObject::setMesh(mesh.mesh, mesh.vertexCount, mesh.triangles);
+	//meshList.push_back(mesh);
+*/
 }
 
 void ClBowlPlayer::applyAcceleration(short  padX, short  padY, ScePspFMatrix4* viewMatrix){
@@ -190,6 +269,14 @@ void ClBowlPlayer::applyAcceleration(short  padX, short  padY, ScePspFMatrix4* v
 	ClVectorHelper::normalize(&worldMoveZ);
 }
 
+/*
+ * apply the boost to the stick movements
+ */
+void ClBowlPlayer::applyBoost(float boost){
+	ClVectorHelper::scale(&worldMoveX, 1.0f+boost);
+	ClVectorHelper::scale(&worldMoveZ, 1.0f+boost);
+}
+
 ClSceneObject* ClBowlPlayer::move(float gravity){
 
 	//apply the gravity, the stick movement
@@ -211,9 +298,9 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 			worldMoveZ.y = (-collInfo.collPlane->normal.x*worldMoveZ.x - collInfo.collPlane->normal.z*worldMoveZ.z)/collInfo.collPlane->normal.y;
 		}
 		//add the stick movement to the current direction
-		direction.x += (worldMoveX.x*accelX + worldMoveZ.x*accelZ)/40.0f;
-		direction.y += (worldMoveX.y*accelX + worldMoveZ.y*accelZ)/40.0f;
-		direction.z += (worldMoveX.z*accelX + worldMoveZ.z*accelZ)/40.0f;
+		direction.x += (worldMoveX.x*accelX + worldMoveZ.x*accelZ)*0.04f;// /20.0f;
+		direction.y += (worldMoveX.y*accelX + worldMoveZ.y*accelZ)*0.04f;// /20.0f;
+		direction.z += (worldMoveX.z*accelX + worldMoveZ.z*accelZ)*0.04f;// /20.0f;
 
 /*		//if the touched object is an animated one the object movement will impact the bowl movement
 		const char* className = typeid(*collInfo.collObject).name();
@@ -267,7 +354,7 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 	}
 	{
 		// move to the next position but slow down the movement a small peace each time
-		ClVectorHelper::scale(&direction, 1.0f-0.015f);
+		ClVectorHelper::scale(&direction, 0.985f);
 		pos.x += direction.x;
 		pos.y += direction.y;
 		pos.z += direction.z;
@@ -334,40 +421,10 @@ void ClBowlPlayer::render(){
 	renderPos.y = pos.y;
 	renderPos.z = pos.z;
 
+	//apply movement and rotation to the bowl while rendering
 	sceGumTranslate(&renderPos);
-	/*
-	//in addition to the movement of the bowl we need to rotate the same
-	//for this we have the rotation axis in place
-	//check for the rotation axis
-	roll = ClVectorHelper::length(&rollAxis);
-
-	if (roll > 0.0001f){
-		//the real roll length is the length of the
-		//direction vector
-		//360°/2PI*r = roll°/direction.lenght
-		//roll° = 360°*direction.lenght/2PI*r
-		//roll_rad = 360°*dir.l*PI/180°*2PI*r
-		//roll_rad =dir.l/r
-
-		roll  = ClVectorHelper::length(&direction)/boundingSphere;
-		ClVectorHelper::normalize(&rollAxis);
-
-		rSin = sinf(roll);
-		rCos = cosf(roll);
-		r1Cos = 1 - rCos;
-		ScePspFMatrix4 rotMatrix =
-				{{rollAxis.x*rollAxis.x*(r1Cos)+rCos, rollAxis.x*rollAxis.y*(r1Cos)-rollAxis.z*rSin, rollAxis.x*rollAxis.z*(r1Cos)+rollAxis.y*rSin, 0.0f},
-				 {rollAxis.x*rollAxis.y*(r1Cos)+rollAxis.z*rSin, rollAxis.y*rollAxis.y*(r1Cos)+rCos, rollAxis.y*rollAxis.z*(r1Cos)-rollAxis.x*rSin, 0.0f},
-				 {rollAxis.x*rollAxis.z*(r1Cos)-rollAxis.y*rSin, rollAxis.y*rollAxis.z*(r1Cos)+rollAxis.x*rSin, rollAxis.z*rollAxis.z*(r1Cos)+rCos, 0.0f},
-				 {0.0f, 0.0f, 0.0f, 1.0f}
-				};
-		//apply rotation matrix
-		rot = (ScePspFMatrix4*)memalign(16, sizeof(ScePspFMatrix4));
-		gumMultMatrix(rot, &rotMatrix, &rollMatrix);
-		rollMatrix = *rot;
-		free(rot);
-	}*/
 	sceGumMultMatrix(&rollMatrix);
+
 	int i = 0;
 	//running through all meshes
 	for (int m=0;m<meshList.size();m++){
@@ -399,7 +456,7 @@ void ClBowlPlayer::render(){
 		} else
 			sceGuColor(0xffffffff);
 
-		sceGuFrontFace(GU_CCW);
+		sceGuFrontFace(GU_CW);
 		sceGumDrawArray(GU_TRIANGLES,GU_TEXTURE_32BITF |GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, meshList[m].vertexCount, 0, meshList[m].mesh);
 		sceGuFrontFace(GU_CW);
 		sceGuModelColor(0x00000000, 0x00000000, 0x00000000, 0x00000000);
@@ -471,7 +528,7 @@ bool ClBowlPlayer::collisionDetection(CollisionInfo* collInfo, ScePspFVector4* d
 					tr3.z += tPos->z - oPos->z;
 				}
 				//it is possible that the mesh contains dummy triangles
-				//they are thin and at leats two points are the same
+				//they are thin and at least two points are the same
 				//this triangles should not be considered for collision detection
 				if (ClVectorHelper::equal(&tr1, &tr2) ||
 					ClVectorHelper::equal(&tr1, &tr3) ||
@@ -725,8 +782,9 @@ void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo, float gravityValue
 		ClVectorHelper::crossProduct(&normal, &collInfo->collPlane->normal, &gravity);
 		ClVectorHelper::crossProduct(&acceleration, &normal, &collInfo->collPlane->normal);
 		acceleration.w = 0.0f;
-		//scale the acceleration vector
-		ClVectorHelper::scale(&acceleration, 0.15f);
+		//scale the acceleration vector - why ?
+		//check without...
+		ClVectorHelper::scale(&acceleration, 0.7f);
 
 		//if the bowl is currently moving it should continue the same, but
 		//on the new plane.
@@ -742,18 +800,21 @@ void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo, float gravityValue
 			ScePspFVector4 newDir;
 			if ( -0.00001f <= collInfo->collPlane->normal.y
 			    && 0.00001f >= collInfo->collPlane->normal.y ){
+				//TODO: add "sliding" code here on this kind of planes
+				//      or bouncing ;o)
 				newDir.x = 0.0f;
 				newDir.z = 0.0f;
 				newDir.y = -gravityValue/80.0f;
 			} else {
-				newDir.x = direction.x;
-				newDir.z = direction.z;
+				newDir.x = direction.x + acceleration.x;
+				newDir.z = direction.z + acceleration.z;
 				newDir.y = (-collInfo->collPlane->normal.x*direction.x - collInfo->collPlane->normal.z*direction.z)/collInfo->collPlane->normal.y;
-				//normalize the new direction vector
+/*				//normalize the new direction vector
 				ClVectorHelper::normalize(&newDir);
 
 				//scale the vector with the original speed
 				ClVectorHelper::scale(&newDir, speed);
+				*/
 			}
 			direction = newDir;
 		}
@@ -834,7 +895,191 @@ void ClBowlPlayer::updateRotation(){
 
 }
 
+void ClBowlPlayer::doShadow(std::vector<ClSceneLight*>* lightList){
 
+	//for all lights create the shadow volume and set the stencil buffer while drawing the same
+	ScePspFVector3 lightPos;
+	ScePspFVector4 lightPos2;
+	sceGuStencilFunc(GU_ALWAYS,0, 0x0);
+
+	for (int i=0;i<lightList->size();i++){
+		lightPos = lightList->at(i)->getPosition();
+		lightPos2.x = lightPos.x;
+		lightPos2.y = lightPos.y;
+		lightPos2.z = lightPos.z;
+		lightPos2.w = 0.0f;
+
+		sceGuStencilOp(GU_KEEP, GU_INCR, GU_KEEP);
+
+		sceGuFrontFace(GU_CW);
+		sceGuDisable(GU_TEXTURE_2D);
+		sceGuDisable(GU_CLIP_PLANES);
+		sceGuDisable(GU_SCISSOR_TEST);
+		castShadowVolume(&lightPos2);
+
+		sceGuFrontFace(GU_CCW);
+		sceGuStencilOp(GU_KEEP, GU_DECR, GU_KEEP);
+		castShadowVolume(&lightPos2);
+	}
+	//restore the states
+	sceGuFrontFace(GU_CW);
+	sceGuEnable(GU_CLIP_PLANES);
+	sceGuEnable(GU_SCISSOR_TEST);
+}
+
+void ClBowlPlayer::castShadowVolume(ScePspFVector4* lightPos){
+	ScePspFMatrix4 transform, trans2;
+	ScePspFVector4 lightPos2;
+
+	//first set up the transformation matrix from original render
+	//than transpose and recalculate the ligthpos into the object space....
+	gumLoadIdentity(&transform);
+	ScePspFVector3 renderPos;
+	renderPos.x = pos.x;
+	renderPos.y = pos.y;
+	renderPos.z = pos.z;
+
+	sceGumMatrixMode(GU_MODEL);
+	gumTranslate(&transform, &renderPos);
+	//apply the rotation of the bowl to the light pos to get
+	//the right relative position for shadow volume generation
+	gumMultMatrix(&trans2, &transform, &rollMatrix);
+	//do move the shadow volume to the same position as the bowl and rotate if necessary...
+	sceGumLoadMatrix(&trans2);
+
+
+	gumFullInverse(&transform, &trans2);
+	//as the vertexes of the shadow object are in model space and the light position in world space
+	//we need to adopt the light position relative to this objects based on the objects position
+	ClVectorHelper::vectorMulMatrix(&lightPos2, lightPos, &transform);
+
+	unsigned int tri;
+	vector<int> lightFacingTri;
+	for (tri=0;tri<this->meshList[0].triangleCount;tri++){
+		ScePspFVector4 relLight;
+		relLight.x = lightPos2.x - meshList[0].mesh[tri*3].x;
+		relLight.y = lightPos2.y - meshList[0].mesh[tri*3].y;
+		relLight.z = lightPos2.z - meshList[0].mesh[tri*3].z;
+
+		ScePspFVector4 side1, side2, v1, v2;
+		side1.x = meshList[0].mesh[tri*3+1].x - meshList[0].mesh[tri*3].x;
+		side1.y = meshList[0].mesh[tri*3+1].y - meshList[0].mesh[tri*3].y;
+		side1.z = meshList[0].mesh[tri*3+1].z - meshList[0].mesh[tri*3].z;
+
+		side2.x = meshList[0].mesh[tri*3+2].x - meshList[0].mesh[tri*3].x;
+		side2.y = meshList[0].mesh[tri*3+2].y - meshList[0].mesh[tri*3].y;
+		side2.z = meshList[0].mesh[tri*3+2].z - meshList[0].mesh[tri*3].z;
+
+		ScePspFVector4 normal = {meshList[0].mesh[tri*3].nx,
+								 meshList[0].mesh[tri*3].ny,
+								 meshList[0].mesh[tri*3].nz,
+								 0.0f};
+		ClVectorHelper::crossProduct(&normal, &side1, &side2);
+		//check whether this triangle is facing to the light or not
+		float dot = ClVectorHelper::dotProduct(&relLight, &normal);
+		if (dot > 0.0f){
+			//found a triangle facing towards the light
+
+			//reuse this triangle to close the shadowvolume
+			lightFacingTri.push_back(tri);
+			int neighbor;
+			//searching for not facing towards the light
+			for (neighbor=0;neighbor<3;neighbor++){
+				int index = meshList[0].neighbors[tri].index[neighbor];
+				if (index != -1){
+
+					side1.x = meshList[0].mesh[index*3+1].x - meshList[0].mesh[index*3].x;
+					side1.y = meshList[0].mesh[index*3+1].y - meshList[0].mesh[index*3].y;
+					side1.z = meshList[0].mesh[index*3+1].z - meshList[0].mesh[index*3].z;
+
+					side2.x = meshList[0].mesh[index*3+2].x - meshList[0].mesh[index*3].x;
+					side2.y = meshList[0].mesh[index*3+2].y - meshList[0].mesh[index*3].y;
+					side2.z = meshList[0].mesh[index*3+2].z - meshList[0].mesh[index*3].z;
+
+					normal.x = meshList[0].mesh[index*3].nx;
+					normal.y = meshList[0].mesh[index*3].ny;
+					normal.z = meshList[0].mesh[index*3].nz;
+
+					ClVectorHelper::crossProduct(&normal, &side1, &side2);
+					dot = ClVectorHelper::dotProduct(&relLight, &normal);
+				} else {
+					dot = -1.0f;
+				}
+				if (dot <= 0.0f){
+					//this neigbor is not facing to the light, this mean the side
+					//the triangles are touching is casting shadow
+					//draw the shadow-triangles
+					side1.x = meshList[0].mesh[tri*3+neighbor].x;
+					side1.y = meshList[0].mesh[tri*3+neighbor].y;
+					side1.z = meshList[0].mesh[tri*3+neighbor].z;
+
+					side2.x = meshList[0].mesh[tri*3+((neighbor+1)%3)].x;
+					side2.y = meshList[0].mesh[tri*3+((neighbor+1)%3)].y;
+					side2.z = meshList[0].mesh[tri*3+((neighbor+1)%3)].z;
+
+					v1.x = side1.x - lightPos2.x;
+					v1.y = side1.y - lightPos2.y;
+					v1.z = side1.z - lightPos2.z;
+
+					v2.x = side2.x - lightPos2.x;
+					v2.y = side2.y - lightPos2.y;
+					v2.z = side2.z - lightPos2.z;
+
+
+					ClVectorHelper::normalize(&v1);ClVectorHelper::scale(&v1, 50.0f);
+					ClVectorHelper::normalize(&v2);ClVectorHelper::scale(&v2, 50.0f);
+
+					ColorFVertex* shadow = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*6);
+					shadow[0].x = side1.x;
+					shadow[0].y = side1.y;
+					shadow[0].z = side1.z;
+					shadow[0].color = 0xff000000;
+
+					shadow[1].x = side1.x + v1.x;
+					shadow[1].y = side1.y + v1.y;
+					shadow[1].z = side1.z + v1.z;
+					shadow[1].color = 0xff000000;
+
+					shadow[2].x = side2.x;
+					shadow[2].y = side2.y;
+					shadow[2].z = side2.z;
+					shadow[2].color = 0xff000000;
+
+					shadow[3] = shadow[1];
+
+					shadow[4].x = side2.x + v2.x;
+					shadow[4].y = side2.y + v2.y;
+					shadow[4].z = side2.z + v2.z;
+					shadow[4].color = 0xff000000;
+
+					shadow[5] = shadow[2];
+					//draw the shadow volume triangles
+					sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,6 ,0 , shadow);
+
+				}
+			}
+		}
+	}
+
+	//after the sides we will render the closing parts of the shadow volume
+	if (!lightFacingTri.empty()){
+		ColorFVertex* shadow = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*lightFacingTri.size()*3);
+		for (int c=0;c<lightFacingTri.size();c++){
+			shadow[c*3].x = meshList[0].mesh[lightFacingTri[c]*3].x;
+			shadow[c*3].y = meshList[0].mesh[lightFacingTri[c]*3].y;
+			shadow[c*3].z = meshList[0].mesh[lightFacingTri[c]*3].z;
+
+			shadow[c*3+1].x = meshList[0].mesh[lightFacingTri[c]*3+1].x;
+			shadow[c*3+1].y = meshList[0].mesh[lightFacingTri[c]*3+1].y;
+			shadow[c*3+1].z = meshList[0].mesh[lightFacingTri[c]*3+1].z;
+
+			shadow[c*3+2].x = meshList[0].mesh[lightFacingTri[c]*3+2].x;
+			shadow[c*3+2].y = meshList[0].mesh[lightFacingTri[c]*3+2].y;
+			shadow[c*3+2].z = meshList[0].mesh[lightFacingTri[c]*3+2].z;
+		}
+		sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,lightFacingTri.size()*3 ,0 , shadow);
+	}
+}
 
 
 
