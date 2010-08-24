@@ -9,13 +9,15 @@
 
 extern "C"{
 #include <stdio.h>
+#include <pspkerneltypes.h>
+#include <pspaudio.h>
 }
 
 class ClMp3Helper {
 public:
 	static bool initMP3();
 	static void closeMP3();
-	static int playMP3(const char* fileName, unsigned short volume);
+	static int playMP3(const char* fileName, unsigned short volume = PSP_AUDIO_VOLUME_MAX);
 	static void stopMP3(int mp3ID);
 	static void setMP3Volume(int mp3ID, unsigned short volume);
 

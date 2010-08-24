@@ -11,6 +11,7 @@ extern "C"{
 }
 #include "SimpleMenu.h"
 #include "TextHelper.h"
+#include "Mp3Helper.h"
 #include <psptypes3d.h>
 
 ClSimpleMenu::ClSimpleMenu(short posX, short posY) {
@@ -91,14 +92,22 @@ short ClSimpleMenu::handlePad(){
 		//button pressed ?
 	if (pad.Buttons != 0 && lastPad.Buttons != pad.Buttons){
 		if (pad.Buttons & PSP_CTRL_DOWN){
-			if (selectedItem < this->itemCount)
+			if (selectedItem < this->itemCount){
+				//if item change play change sound
+				ClMp3Helper::playMP3("snd//whup11.mp3");
 				selectedItem++;
+			}
 		}
 		if (pad.Buttons & PSP_CTRL_UP){
-			if (selectedItem > 1)
+			if (selectedItem > 1){
+				//if item change play change sound
+				ClMp3Helper::playMP3("snd//whup11.mp3");
 				selectedItem--;
+			}
 		}
 		if (pad.Buttons & PSP_CTRL_CROSS){
+			//if item selected play select sound
+			ClMp3Helper::playMP3("snd//blubb1.mp3");
 			return this->menuItems[selectedItem-1]->actionId;
 		}
 	}

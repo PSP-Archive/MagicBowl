@@ -12,6 +12,7 @@ extern "C"{
 #include <pspgu.h>
 #include <pspgum.h>
 #include <psptypes3d.h>
+#include <pspdebug.h>
 }
 
 #include <MonzoomAPI.h>
@@ -26,11 +27,14 @@ extern "C"{
 using namespace monzoom;
 
 ClBowlPlayer::ClBowlPlayer(ScePspFVector4* centralPos, float radius, ClSceneObject* world)
-             :ClStaticSceneObject("Player"){
+             :ClStaticSceneObject("Bowl"){
 	// TODO Auto-generated constructor stub
 
 	this->pos = *centralPos;
 	boundingSphere = radius;
+	//this object is casting shadow
+	castShadow = true;
+
 	generateMesh(20, radius);
 
 	//set initial direction to 0
@@ -120,121 +124,6 @@ void ClBowlPlayer::generateMesh(short degrees_of_segments, float radius){
 	objectList.clear();
 	delete(mzFile);
 
-	return;
-/*
-	unsigned int      triangles = 0,
-					  vertexCount = 0,
-					  vertex = 0;
-
-	Mesh mesh;
-	//calculate total number of vertices
-	triangles = (360/degrees_of_segments)* 180/degrees_of_segments * 2;
-	mesh.vertexCount = triangles*3;
-	//get memory
-	mesh.mesh = (NormalTexFVertex*)memalign(16, mesh.vertexCount*sizeof(NormalTexFVertex));
-	mesh.triangles = (TriangleIdx*)malloc(sizeof(TriangleIdx)*triangles);
-
-	float ex, ey, ez;
-
-	//generate sphere  mesh
-	for (int ha=0;ha<180;ha+=degrees_of_segments){
-		for (int la=0;la<360;la+=degrees_of_segments){
-			ex = sinf(la*GU_PI/180.0f)*sinf(ha*GU_PI/180.0f);
-			ey = cosf(ha*GU_PI/180.0f);
-			ez = cosf(la*GU_PI/180.0f)*sinf(ha*GU_PI/180.0f);
-
-			mesh.mesh[vertex].z = radius*ez;
-			mesh.mesh[vertex].x = radius*ex;
-			mesh.mesh[vertex].y = radius*ey;
-
-			mesh.mesh[vertex].nx = ex;
-			mesh.mesh[vertex].ny = ey;
-			mesh.mesh[vertex].nz = ez;
-
-			mesh.mesh[vertex].u = (atan2f(ex, ez)/(GU_PI*2));
-			//u starts at 0 goes to 0.5 and starts at -0.5 and goes to 0
-			//we need to set this to go from 0 to 1
-			if (mesh.mesh[vertex].u < 0.0f) mesh.mesh[vertex].u += 1.0f;
-			//if we are close to 360° the u component goes from closely 1 back to 0
-			//this results in texture cracks, we need to avoid this
-			if(la>=(360-degrees_of_segments) && mesh.mesh[vertex].u < 0.75) mesh.mesh[vertex].u += 1.0f;
-			mesh.mesh[vertex].v = (asinf(ey)/GU_PI) + 0.5f;
-
-			ex = sinf(la*GU_PI/180.0f)*sinf((ha+degrees_of_segments)*GU_PI/180.0f);
-			ey = cosf((ha+degrees_of_segments)*GU_PI/180.0f);
-			ez = cosf(la*GU_PI/180.0f)*sinf((ha+degrees_of_segments)*GU_PI/180.0f);
-
-			mesh.mesh[vertex+1].z = radius*ez;
-			mesh.mesh[vertex+1].x = radius*ex;
-			mesh.mesh[vertex+1].y = radius*ey;
-
-			mesh.mesh[vertex+1].nx = ex;
-			mesh.mesh[vertex+1].ny = ey;
-			mesh.mesh[vertex+1].nz = ez;
-
-			mesh.mesh[vertex+1].u = (atan2f(ex, ez)/(GU_PI*2));
-			if (mesh.mesh[vertex+1].u < 0.0f) mesh.mesh[vertex+1].u += 1.0f;
-			if(la>=(360-degrees_of_segments) && mesh.mesh[vertex+1].u < 0.75) mesh.mesh[vertex+1].u += 1.0f;
-			mesh.mesh[vertex+1].v = (asinf(ey)/GU_PI) + 0.5f;
-
-			ex = sinf((la+degrees_of_segments)*GU_PI/180.0f)*sinf(ha*GU_PI/180.0f);
-			ey = cosf(ha*GU_PI/180.0f);
-			ez = cosf((la+degrees_of_segments)*GU_PI/180.0f)*sinf(ha*GU_PI/180.0f);
-
-			mesh.mesh[vertex+2].z = radius*ez;
-			mesh.mesh[vertex+2].x = radius*ex;
-			mesh.mesh[vertex+2].y = radius*ey;
-
-			mesh.mesh[vertex+2].nx = ex;
-			mesh.mesh[vertex+2].ny = ey;
-			mesh.mesh[vertex+2].nz = ez;
-
-			mesh.mesh[vertex+2].u = (atan2f(ex, ez)/(GU_PI*2));
-			//u starts at 0 goes to 0.5 and starts at -0.5 and goes to 0
-			//we need to set this to go from 0 to 1
-			if (mesh.mesh[vertex+2].u < 0.0f) mesh.mesh[vertex+2].u += 1.0f;
-			//if we are close to 360° the u component goes from closely 1 back to 0
-			//this results in texture cracks, we need to avoid this
-			if(la>=(360-degrees_of_segments) && mesh.mesh[vertex+2].u < 0.75) mesh.mesh[vertex+2].u += 1.0f;
-			mesh.mesh[vertex+2].v = (asinf(ey)/GU_PI) + 0.5f;
-
-			mesh.mesh[vertex+3] = mesh.mesh[vertex+1];
-
-			ex = sinf((la+degrees_of_segments)*GU_PI/180.0f)*sinf((ha+degrees_of_segments)*GU_PI/180.0f);
-			ey = cosf((ha+degrees_of_segments)*GU_PI/180.0f);
-			ez = cosf((la+degrees_of_segments)*GU_PI/180.0f)*sinf((ha+degrees_of_segments)*GU_PI/180.0f);
-
-			mesh.mesh[vertex+4].z = radius*ez;
-			mesh.mesh[vertex+4].x = radius*ex;
-			mesh.mesh[vertex+4].y = radius*ey;
-
-			mesh.mesh[vertex+4].nx = ex;
-			mesh.mesh[vertex+4].ny = ey;
-			mesh.mesh[vertex+4].nz = ez;
-
-			mesh.mesh[vertex+4].u = (atan2f(ex, ez)/(GU_PI*2));
-			//u starts at 0 goes to 0.5 and starts at -0.5 and goes to 0
-			//we need to set this to go from 0 to 1
-			if (mesh.mesh[vertex+4].u < 0.0f) mesh.mesh[vertex+4].u += 1.0f;
-			//if we are close to 360° the u component goes from closely 1 back to 0
-			//this results in texture cracks, we need to avoid this
-			if(la>=(360-degrees_of_segments) && mesh.mesh[vertex+4].u < 0.75) mesh.mesh[vertex+4].u += 1.0f;
-			mesh.mesh[vertex+4].v = (asinf(ey)/GU_PI) + 0.5f;
-
-			mesh.mesh[vertex+5] = mesh.mesh[vertex+2];
-
-			vertex+=6;
-		}
-	}
-
-	//create the triangle index
-	for (int v=0;v<mesh.vertexCount;v++){
-		mesh.triangles[v/3].index[v%3] = v;
-	}
-
-	ClSceneObject::setMesh(mesh.mesh, mesh.vertexCount, mesh.triangles);
-	//meshList.push_back(mesh);
-*/
 }
 
 void ClBowlPlayer::applyAcceleration(short  padX, short  padY, ScePspFMatrix4* viewMatrix){
@@ -298,27 +187,9 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 			worldMoveZ.y = (-collInfo.collPlane->normal.x*worldMoveZ.x - collInfo.collPlane->normal.z*worldMoveZ.z)/collInfo.collPlane->normal.y;
 		}
 		//add the stick movement to the current direction
-		direction.x += (worldMoveX.x*accelX + worldMoveZ.x*accelZ)*0.04f;// /20.0f;
-		direction.y += (worldMoveX.y*accelX + worldMoveZ.y*accelZ)*0.04f;// /20.0f;
-		direction.z += (worldMoveX.z*accelX + worldMoveZ.z*accelZ)*0.04f;// /20.0f;
-
-/*		//if the touched object is an animated one the object movement will impact the bowl movement
-		const char* className = typeid(*collInfo.collObject).name();
-		if (strstr(className, "ClAnimatedSceneObject") != 0){
-			//if the object is an animated one we apply the object movement to the bowl as well
-			const ScePspFVector4* oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
-			//if we touched this object the first time get the direction a second time to initialize the
-			//direction "delta" if the object was already in move bevore we have touched it
-			if (collInfo.lastCollObject != collInfo.collObject){
-				oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
-				collInfo.lastCollObject = collInfo.collObject;
-			}
-			//add this direction to the bowl movement
-			pos.x += oDir->x;
-			pos.y += oDir->y;
-			pos.z += oDir->z;
-		}
-		*/
+		direction.x += (worldMoveX.x*accelX + worldMoveZ.x*accelZ)*0.05f;// /20.0f;
+		direction.y += (worldMoveX.y*accelX + worldMoveZ.y*accelZ)*0.05f;// /20.0f;
+		direction.z += (worldMoveX.z*accelX + worldMoveZ.z*accelZ)*0.05f;// /20.0f;
 	}
 	direction.x+= acceleration.x;
 	direction.y+= acceleration.y;
@@ -411,6 +282,7 @@ const ScePspFVector4* ClBowlPlayer::getPosition(){
 
 void ClBowlPlayer::render(){
 	float rSin, rCos,r1Cos, roll;
+	unsigned int color;
 	Material material;
 	ScePspFMatrix4 *rot;
 
@@ -430,37 +302,40 @@ void ClBowlPlayer::render(){
 	for (int m=0;m<meshList.size();m++){
 		//dependent of the material for this object we set
 		//the color and/or texture
-		monzoom::ClMaterialColor* mat = getMaterial();
-		if (mat){
-			sceGuColor(mat->getColor());
-			sceGuModelColor(0x00111111, mat->getColor(), mat->getColor(), 0x00000000);
-			if (mat->getType() == 1){
-				//it is a texture material
-				ClMaterialTexture* tex = (ClMaterialTexture*)mat;
-				ClTextureMgr::getInstance()->useTexture(tex->getTexture());
-				/*
-				sceGuEnable(GU_TEXTURE_2D);
-				sceGuTexMapMode(GU_TEXTURE_COORDS,0,0);//GU_TEXTURE_MATRIX, 0, 0); //texture mapping using matrix instead u, v
-				sceGuTexProjMapMode(GU_UV); //texture mapped based on the position of the objects relative to the texture
+		if (!materialList.empty() && materialList[0].material){
+			color = materialList[0].material->getColor();
 
-				sceGuTexMode(tex->getTexture()->type, 0,0,tex->getTexture()->swizzled);
-				sceGuTexImage(0,tex->getTexture()->width,tex->getTexture()->height,tex->getTexture()->stride, tex->getTexture()->data);
-				sceGuTexOffset(0.0f, 0.0f);
-				sceGuTexScale(1.0f, 1.0f);
-				sceGuTexFunc(GU_TFX_MODULATE,GU_TCC_RGBA);//apply RGBA value of texture
-				sceGuTexFilter(GU_LINEAR,GU_LINEAR); //interpolate to have smooth borders
-				sceGuTexWrap(GU_REPEAT,GU_REPEAT); //do repeat the texture if necessary
-				*/
+			monzoom::ClMaterialColor* mat = materialList[0].material;
+			if (mat->getType() == 1 || mat->getType() == 2){
+				//it is a texture material
+				Texture* texture;
+				if (mat->getType() == 1){
+					ClMaterialTexture* tex = (ClMaterialTexture*)materialList[0].material;
+					texture = tex->getTexture();
+				}else{
+					ClAnimMaterialTexture* tex = (ClAnimMaterialTexture*)materialList[0].material;
+					texture = tex->getTexture();
+				}
+				//for what ever reason we could have come to here, but
+				//texture is not available, may be due to texture load error
+				//we need to check that texture really exists to prevent the app
+				//getting in stuck with 0-pointer object
+				if (texture){
+					ClTextureMgr::getInstance()->useTexture(texture);
+
+				} else
+					sceGuDisable(GU_TEXTURE_2D);
 			} else
 				sceGuDisable(GU_TEXTURE_2D);
-		} else
-			sceGuColor(0xffffffff);
+		} else {//no material assigned - default color white, no texture
+			color = 0xffffffff;
+			sceGuDisable(GU_TEXTURE_2D);
+		}
 
 		sceGuFrontFace(GU_CW);
+		sceGuColor(color);
 		sceGumDrawArray(GU_TRIANGLES,GU_TEXTURE_32BITF |GU_NORMAL_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, meshList[m].vertexCount, 0, meshList[m].mesh);
-		sceGuFrontFace(GU_CW);
-		sceGuModelColor(0x00000000, 0x00000000, 0x00000000, 0x00000000);
-	}
+	} //meshList loop
 }
 
 bool ClBowlPlayer::collisionDetection(CollisionInfo* collInfo, ScePspFVector4* direction, vector<monzoom::ClSceneObject*> objectList){
@@ -775,16 +650,16 @@ void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo, float gravityValue
 		 * this new direction vector is the cross product
 		 * of normal and gravity and the cross product of this result
 		 * with the normal again
-		 * the gravity is only directed in y dircetion with -1
+		 * the gravity is only directed in y direction with -1
 		 */
 		ScePspFVector4 normal;
-		ScePspFVector4 gravity = {0.0f, -1.0f, 0.0f, 0.0f};
+		ScePspFVector4 gravity = {0.0f, -gravityValue, 0.0f, 0.0f};
 		ClVectorHelper::crossProduct(&normal, &collInfo->collPlane->normal, &gravity);
 		ClVectorHelper::crossProduct(&acceleration, &normal, &collInfo->collPlane->normal);
 		acceleration.w = 0.0f;
 		//scale the acceleration vector - why ?
 		//check without...
-		ClVectorHelper::scale(&acceleration, 0.7f);
+		ClVectorHelper::scale(&acceleration, 0.05f);
 
 		//if the bowl is currently moving it should continue the same, but
 		//on the new plane.
@@ -804,7 +679,7 @@ void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo, float gravityValue
 				//      or bouncing ;o)
 				newDir.x = 0.0f;
 				newDir.z = 0.0f;
-				newDir.y = -gravityValue/80.0f;
+				newDir.y = 0.0;//-gravityValue/80.0f;
 			} else {
 				newDir.x = direction.x + acceleration.x;
 				newDir.z = direction.z + acceleration.z;
@@ -903,23 +778,29 @@ void ClBowlPlayer::doShadow(std::vector<ClSceneLight*>* lightList){
 	sceGuStencilFunc(GU_ALWAYS,0, 0x0);
 
 	for (int i=0;i<lightList->size();i++){
+		//if the light does not cast shadows ignore it
+		if (!lightList->at(i)->getCastShadow())
+			continue;
 		lightPos = lightList->at(i)->getPosition();
 		lightPos2.x = lightPos.x;
 		lightPos2.y = lightPos.y;
 		lightPos2.z = lightPos.z;
 		lightPos2.w = 0.0f;
 
-		sceGuStencilOp(GU_KEEP, GU_INCR, GU_KEEP);
+		//use z-path instead of z-fail (carmarks reverse)
+		//sceGuStencilOp(GU_KEEP, GU_INCR, GU_KEEP);
+		sceGuStencilOp(GU_KEEP, GU_KEEP, GU_INCR);
 
 		sceGuFrontFace(GU_CW);
 		sceGuDisable(GU_TEXTURE_2D);
 		sceGuDisable(GU_CLIP_PLANES);
 		sceGuDisable(GU_SCISSOR_TEST);
-		castShadowVolume(&lightPos2);
+		castShadowVolume(&lightPos2, false);
 
 		sceGuFrontFace(GU_CCW);
-		sceGuStencilOp(GU_KEEP, GU_DECR, GU_KEEP);
-		castShadowVolume(&lightPos2);
+		//sceGuStencilOp(GU_KEEP, GU_DECR, GU_KEEP);
+		sceGuStencilOp(GU_KEEP, GU_KEEP, GU_DECR);
+		castShadowVolume(&lightPos2, true);
 	}
 	//restore the states
 	sceGuFrontFace(GU_CW);
@@ -927,9 +808,14 @@ void ClBowlPlayer::doShadow(std::vector<ClSceneLight*>* lightList){
 	sceGuEnable(GU_SCISSOR_TEST);
 }
 
-void ClBowlPlayer::castShadowVolume(ScePspFVector4* lightPos){
+void ClBowlPlayer::castShadowVolume(ScePspFVector4* lightPos, bool useOnly){
+	static std::vector<ColorFVertex> shadowBuff;
+	static std::vector<ColorFVertex> backFan;
 	ScePspFMatrix4 transform, trans2;
 	ScePspFVector4 lightPos2;
+	ColorFVertex* line, *fan;
+	ScePspFVector4 side1, side2, v1, v2;
+	unsigned int color = 0x7f0000ff;
 
 	//first set up the transformation matrix from original render
 	//than transpose and recalculate the ligthpos into the object space....
@@ -948,136 +834,201 @@ void ClBowlPlayer::castShadowVolume(ScePspFVector4* lightPos){
 	sceGumLoadMatrix(&trans2);
 
 
-	gumFullInverse(&transform, &trans2);
-	//as the vertexes of the shadow object are in model space and the light position in world space
-	//we need to adopt the light position relative to this objects based on the objects position
-	ClVectorHelper::vectorMulMatrix(&lightPos2, lightPos, &transform);
+	//if we need to really calculate the shadow volume
+	if (!useOnly || shadowBuff.empty()){
 
-	unsigned int tri;
-	vector<int> lightFacingTri;
-	for (tri=0;tri<this->meshList[0].triangleCount;tri++){
-		ScePspFVector4 relLight;
-		relLight.x = lightPos2.x - meshList[0].mesh[tri*3].x;
-		relLight.y = lightPos2.y - meshList[0].mesh[tri*3].y;
-		relLight.z = lightPos2.z - meshList[0].mesh[tri*3].z;
+		shadowBuff.clear();
+		backFan.clear();
 
-		ScePspFVector4 side1, side2, v1, v2;
-		side1.x = meshList[0].mesh[tri*3+1].x - meshList[0].mesh[tri*3].x;
-		side1.y = meshList[0].mesh[tri*3+1].y - meshList[0].mesh[tri*3].y;
-		side1.z = meshList[0].mesh[tri*3+1].z - meshList[0].mesh[tri*3].z;
+		gumFullInverse(&transform, &trans2);
+		//as the vertexes of the shadow object are in model space and the light position in world space
+		//we need to adopt the light position relative to this objects based on the objects position
+		ClVectorHelper::vectorMulMatrix(&lightPos2, lightPos, &transform);
 
-		side2.x = meshList[0].mesh[tri*3+2].x - meshList[0].mesh[tri*3].x;
-		side2.y = meshList[0].mesh[tri*3+2].y - meshList[0].mesh[tri*3].y;
-		side2.z = meshList[0].mesh[tri*3+2].z - meshList[0].mesh[tri*3].z;
-
-		ScePspFVector4 normal = {meshList[0].mesh[tri*3].nx,
-								 meshList[0].mesh[tri*3].ny,
-								 meshList[0].mesh[tri*3].nz,
-								 0.0f};
-		ClVectorHelper::crossProduct(&normal, &side1, &side2);
-		//check whether this triangle is facing to the light or not
-		float dot = ClVectorHelper::dotProduct(&relLight, &normal);
-		if (dot > 0.0f){
-			//found a triangle facing towards the light
-
-			//reuse this triangle to close the shadowvolume
-			lightFacingTri.push_back(tri);
-			int neighbor;
-			//searching for not facing towards the light
-			for (neighbor=0;neighbor<3;neighbor++){
-				int index = meshList[0].neighbors[tri].index[neighbor];
-				if (index != -1){
-
-					side1.x = meshList[0].mesh[index*3+1].x - meshList[0].mesh[index*3].x;
-					side1.y = meshList[0].mesh[index*3+1].y - meshList[0].mesh[index*3].y;
-					side1.z = meshList[0].mesh[index*3+1].z - meshList[0].mesh[index*3].z;
-
-					side2.x = meshList[0].mesh[index*3+2].x - meshList[0].mesh[index*3].x;
-					side2.y = meshList[0].mesh[index*3+2].y - meshList[0].mesh[index*3].y;
-					side2.z = meshList[0].mesh[index*3+2].z - meshList[0].mesh[index*3].z;
-
-					normal.x = meshList[0].mesh[index*3].nx;
-					normal.y = meshList[0].mesh[index*3].ny;
-					normal.z = meshList[0].mesh[index*3].nz;
-
-					ClVectorHelper::crossProduct(&normal, &side1, &side2);
-					dot = ClVectorHelper::dotProduct(&relLight, &normal);
-				} else {
-					dot = -1.0f;
-				}
-				if (dot <= 0.0f){
-					//this neigbor is not facing to the light, this mean the side
-					//the triangles are touching is casting shadow
-					//draw the shadow-triangles
-					side1.x = meshList[0].mesh[tri*3+neighbor].x;
-					side1.y = meshList[0].mesh[tri*3+neighbor].y;
-					side1.z = meshList[0].mesh[tri*3+neighbor].z;
-
-					side2.x = meshList[0].mesh[tri*3+((neighbor+1)%3)].x;
-					side2.y = meshList[0].mesh[tri*3+((neighbor+1)%3)].y;
-					side2.z = meshList[0].mesh[tri*3+((neighbor+1)%3)].z;
-
-					v1.x = side1.x - lightPos2.x;
-					v1.y = side1.y - lightPos2.y;
-					v1.z = side1.z - lightPos2.z;
-
-					v2.x = side2.x - lightPos2.x;
-					v2.y = side2.y - lightPos2.y;
-					v2.z = side2.z - lightPos2.z;
+		unsigned int tri;
+		vector<int> lightFacingTri;
+		for (tri=0;tri<this->meshList[0].triangleCount;tri++){
+			ScePspFVector4 relLight;
+			relLight.x = lightPos2.x - meshList[0].mesh[tri*3].x;
+			relLight.y = lightPos2.y - meshList[0].mesh[tri*3].y;
+			relLight.z = lightPos2.z - meshList[0].mesh[tri*3].z;
 
 
-					ClVectorHelper::normalize(&v1);ClVectorHelper::scale(&v1, 50.0f);
-					ClVectorHelper::normalize(&v2);ClVectorHelper::scale(&v2, 50.0f);
+			ScePspFVector4 normal = {meshList[0].mesh[tri*3].nx,
+									 meshList[0].mesh[tri*3].ny,
+									 meshList[0].mesh[tri*3].nz,
+									 0.0f};
+			//check whether this triangle is facing to the light or not
+			float dot = ClVectorHelper::dotProduct(&relLight, &normal);
+			if (dot > 0.0f){
+				//found a triangle facing towards the light
 
-					ColorFVertex* shadow = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*6);
-					shadow[0].x = side1.x;
-					shadow[0].y = side1.y;
-					shadow[0].z = side1.z;
-					shadow[0].color = 0xff000000;
+				//reuse this triangle to close the shadowvolume
+				lightFacingTri.push_back(tri);
+				int neighbor;
+				//searching for not facing towards the light
+				for (neighbor=0;neighbor<3;neighbor++){
+					int index = meshList[0].neighbors[tri].index[neighbor];
+					if (index != -1){
 
-					shadow[1].x = side1.x + v1.x;
-					shadow[1].y = side1.y + v1.y;
-					shadow[1].z = side1.z + v1.z;
-					shadow[1].color = 0xff000000;
+						normal.x = meshList[0].mesh[index*3].nx;
+						normal.y = meshList[0].mesh[index*3].ny;
+						normal.z = meshList[0].mesh[index*3].nz;
 
-					shadow[2].x = side2.x;
-					shadow[2].y = side2.y;
-					shadow[2].z = side2.z;
-					shadow[2].color = 0xff000000;
+						dot = ClVectorHelper::dotProduct(&relLight, &normal);
+					} else {
+						dot = -1.0f;
+					}
+					if (dot <= 0.0f){
+						//this neigbor is not facing to the light, this mean the side
+						//the triangles are touching is casting shadow
+						//draw the shadow-triangles
+						side1.x = meshList[0].mesh[tri*3+neighbor].x;
+						side1.y = meshList[0].mesh[tri*3+neighbor].y;
+						side1.z = meshList[0].mesh[tri*3+neighbor].z;
 
-					shadow[3] = shadow[1];
+						side2.x = meshList[0].mesh[tri*3+((neighbor+1)%3)].x;
+						side2.y = meshList[0].mesh[tri*3+((neighbor+1)%3)].y;
+						side2.z = meshList[0].mesh[tri*3+((neighbor+1)%3)].z;
 
-					shadow[4].x = side2.x + v2.x;
-					shadow[4].y = side2.y + v2.y;
-					shadow[4].z = side2.z + v2.z;
-					shadow[4].color = 0xff000000;
+						v1.x = side1.x - lightPos2.x;
+						v1.y = side1.y - lightPos2.y;
+						v1.z = side1.z - lightPos2.z;
 
-					shadow[5] = shadow[2];
-					//draw the shadow volume triangles
-					sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,6 ,0 , shadow);
+						v2.x = side2.x - lightPos2.x;
+						v2.y = side2.y - lightPos2.y;
+						v2.z = side2.z - lightPos2.z;
 
+
+						ClVectorHelper::normalize(&v1);ClVectorHelper::scale(&v1, 100.0f);
+						ClVectorHelper::normalize(&v2);ClVectorHelper::scale(&v2, 100.0f);
+
+						ColorFVertex* shadow = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*6);
+						shadow[0].x = side1.x;
+						shadow[0].y = side1.y;
+						shadow[0].z = side1.z;
+						shadow[0].color = color;
+
+						shadow[1].x = side1.x + v1.x;
+						shadow[1].y = side1.y + v1.y;
+						shadow[1].z = side1.z + v1.z;
+						shadow[1].color = color;
+
+						shadow[2].x = side2.x;
+						shadow[2].y = side2.y;
+						shadow[2].z = side2.z;
+						shadow[2].color = color;
+
+						shadow[3] = shadow[1];
+
+						shadow[4].x = side2.x + v2.x;
+						shadow[4].y = side2.y + v2.y;
+						shadow[4].z = side2.z + v2.z;
+						shadow[4].color = color;
+
+						shadow[5] = shadow[2];
+
+						//store these vertices for reuse
+						shadowBuff.push_back(shadow[0]);
+						shadowBuff.push_back(shadow[1]);
+						shadowBuff.push_back(shadow[2]);
+						shadowBuff.push_back(shadow[3]);
+						shadowBuff.push_back(shadow[4]);
+						shadowBuff.push_back(shadow[5]);
+
+						/*
+						line =(ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*2);
+						line[0] = shadow[0];
+						line[1] = shadow[2];
+						line[0].color = 0xffff0000;
+						line[1].color = 0xffff0000;
+
+
+						//add the vertices far away from the light to the fan list to close the shadow volume using
+						//triangle fan
+						fan =(ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*3);
+						fan[0].x = v1.x;
+						fan[0].y = v1.y;
+						fan[0].z = v1.z;
+						fan[0].color = 0xff0000ff;
+						fan[1] = shadow[1];
+						fan[1].color = 0xff00ff00;
+						fan[2] = shadow[4];
+						fan[2].color = 0xffff0000;
+						//backFan.push_back(fan[0]);
+						backFan.push_back(fan[1]);
+						backFan.push_back(fan[2]);
+						*/
+						//draw the shadow volume triangles
+						sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,6 ,0 , shadow);
+						//draw the closing triangles on the far side
+						//sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,3 ,0 , fan);
+
+						/*
+						//for debugging do render the side found for casting the shadow
+						sceGuDisable(GU_DEPTH_TEST);
+						sceGumDrawArray(GU_LINES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 2 ,0 , line);
+						sceGuEnable(GU_DEPTH_TEST);
+						*/
+					}
 				}
 			}
 		}
-	}
 
-	//after the sides we will render the closing parts of the shadow volume
-	if (!lightFacingTri.empty()){
-		ColorFVertex* shadow = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*lightFacingTri.size()*3);
-		for (int c=0;c<lightFacingTri.size();c++){
-			shadow[c*3].x = meshList[0].mesh[lightFacingTri[c]*3].x;
-			shadow[c*3].y = meshList[0].mesh[lightFacingTri[c]*3].y;
-			shadow[c*3].z = meshList[0].mesh[lightFacingTri[c]*3].z;
+		/*
+		 * this is only needed with carmarks reverse (z-Fail) Method,
+		 * currently we are using z-path method as the back-cap seem to be a bit difficult
+		 */
+		/*
+		//after the sides we will render the closing parts of the shadow volume
+		if (!lightFacingTri.empty()){
+			ColorFVertex* shadow = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*lightFacingTri.size()*3);
+			for (int c=0;c<lightFacingTri.size();c++){
+				shadow[c*3].x = meshList[0].mesh[lightFacingTri[c]*3].x;
+				shadow[c*3].y = meshList[0].mesh[lightFacingTri[c]*3].y;
+				shadow[c*3].z = meshList[0].mesh[lightFacingTri[c]*3].z;
 
-			shadow[c*3+1].x = meshList[0].mesh[lightFacingTri[c]*3+1].x;
-			shadow[c*3+1].y = meshList[0].mesh[lightFacingTri[c]*3+1].y;
-			shadow[c*3+1].z = meshList[0].mesh[lightFacingTri[c]*3+1].z;
+				shadow[c*3+1].x = meshList[0].mesh[lightFacingTri[c]*3+1].x;
+				shadow[c*3+1].y = meshList[0].mesh[lightFacingTri[c]*3+1].y;
+				shadow[c*3+1].z = meshList[0].mesh[lightFacingTri[c]*3+1].z;
 
-			shadow[c*3+2].x = meshList[0].mesh[lightFacingTri[c]*3+2].x;
-			shadow[c*3+2].y = meshList[0].mesh[lightFacingTri[c]*3+2].y;
-			shadow[c*3+2].z = meshList[0].mesh[lightFacingTri[c]*3+2].z;
+				shadow[c*3+2].x = meshList[0].mesh[lightFacingTri[c]*3+2].x;
+				shadow[c*3+2].y = meshList[0].mesh[lightFacingTri[c]*3+2].y;
+				shadow[c*3+2].z = meshList[0].mesh[lightFacingTri[c]*3+2].z;
+
+				shadowBuff.push_back(shadow[c*3]);
+				shadowBuff.push_back(shadow[c*3+1]);
+				shadowBuff.push_back(shadow[c*3+2]);
+
+			}
+			sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,lightFacingTri.size()*3 ,0 , shadow);
+
+
+			fan = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*backFan.size());
+			for (int f=0;f<backFan.size();f++){
+				fan[f] = backFan[backFan.size()-(f+1)];
+			}
+			//sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,backFan.size() ,0 , fan);
+			sceGumDrawArray(GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,backFan.size() ,0 , fan);
+		} */
+	} else {
+		//we could use the already stored shadow volume to render again
+		ColorFVertex* shadow = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*shadowBuff.size());
+		for (int s=0;s<shadowBuff.size();s++){
+			shadow[s] = shadowBuff[s];
 		}
-		sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,lightFacingTri.size()*3 ,0 , shadow);
+		sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,shadowBuff.size() ,0 , shadow);
+
+		/*
+		 * not needed yet, as z-pass is used
+		 */
+		/*fan = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*backFan.size());
+		for (int f=0;f<backFan.size();f++){
+			fan[f] = backFan[backFan.size()-(f+1)];
+		}
+		//sceGumDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,backFan.size() ,0 , fan);
+		sceGumDrawArray(GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,backFan.size() ,0 , fan);
+		 */
 	}
 }
 

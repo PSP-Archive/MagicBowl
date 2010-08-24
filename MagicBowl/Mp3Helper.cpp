@@ -145,9 +145,9 @@ int ClMp3Helper::playThread(SceSize args, void *argp){
 
 	sceMp3Init( mp3Handle );
 
-	//int samplingRate = sceMp3GetSamplingRate( mp3Handle );
+	int samplingRate = sceMp3GetSamplingRate( mp3Handle );
 	int numChannels = sceMp3GetMp3ChannelNum( mp3Handle );
-	//int kbits = sceMp3GetBitRate( mp3Handle );
+	int kbits = sceMp3GetBitRate( mp3Handle );
 	int lastDecoded = 0;
 	int volume = params->volume;//PSP_AUDIO_VOLUME_MAX;
 	bool playing = true;

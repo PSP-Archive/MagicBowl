@@ -40,6 +40,7 @@ public:
 	static EventId registerEvent(void* trigger, void* reciever, EventCallback evtCallback, void* cbParameter = 0);
 	static bool triggerEvent(EventId evId);
 	static bool triggerEvent(void* triggerObject);
+	static void resetTrigger(void* triggerObject);
 
 protected:
 

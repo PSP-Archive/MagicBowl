@@ -5,7 +5,7 @@
  *      Author: andreborrmann
  */
 
-#define RENDER_STATS
+//#define RENDER_STATS
 
 extern "C"{
 #include <pspkernel.h>
@@ -90,6 +90,13 @@ bool ClMagicBowlApp::init(){
 		levelData[i].loadImage[length] = 0;
 
 
+		fread(&length, sizeof(int), 1, file);
+		//get Memory for file name
+		levelData[i].shortInfo = (char*)malloc((sizeof(char)*length)+1);
+		fread(levelData[i].shortInfo, sizeof(char), length, file);
+		//terminate string
+		levelData[i].shortInfo[length] = 0;
+
 		fread(&levelData[i].gravity, sizeof(float), 1, file);
 		fread(&levelData[i].bowlPosX, sizeof(float),3, file);
 		fread(&levelData[i].lightPosX, sizeof(float),3, file);
@@ -162,13 +169,13 @@ bool ClMagicBowlApp::init(){
 	trainingLevel->lightPosX = 0.0f;
 	trainingLevel->lightPosY = 20.0f;
 	trainingLevel->lightPosZ = -5.0f;
-	trainingLevel->gravity = 1.9f;//0.1f;
+	trainingLevel->gravity = 9.81f;//0.1f;
 	trainingLevel->lightColor = 0xffffffff;
 	trainingLevel->maxTime = 999.0f;
 	trainingLevel->objectFile = "data/Training.mon\0";
 	trainingLevel->loadImage = "Training.png\0";
 	trainingLevel->shortInfo = "There is an easy and a more difficult way to survive this level. Try out how it works and what you are able to do. You may need it in the compitions coming next...";
-	trainingLevel->actions = 4;
+	trainingLevel->actions = 5;
 	trainingLevel->actionList = (MDLActions*)malloc(sizeof(MDLActions)*trainingLevel->actions);
 	trainingLevel->actionList[0].action = 1;
 	trainingLevel->actionList[0].sourceObject = "NULL\0";
@@ -186,6 +193,10 @@ bool ClMagicBowlApp::init(){
 	trainingLevel->actionList[3].sourceObject = "NULL\0";
 	trainingLevel->actionList[3].targetObject = "Fahrstuhl\0";
 
+	trainingLevel->actionList[4].action = 1;
+	trainingLevel->actionList[4].sourceObject = "NULL\0";
+	trainingLevel->actionList[4].targetObject = "Platform\0";
+
 	//make sure set the PSP does not go to
 	//idle mode if the analog stick is moved
 	sceCtrlSetIdleCancelThreshold(64, 100);
@@ -200,6 +211,14 @@ bool ClMagicBowlApp::init(){
 
 	//set PSP to maximum speed, this cost lots of battery but is needed for maximum performance...
 	scePowerSetClockFrequency(333, 333, 166);
+
+	//load the button textures
+	buttons[BTN_CROSS] = textureMgr->loadFromPNG("btn_cross.png\0");
+	buttons[BTN_TRIANGLE] = textureMgr->loadFromPNG("btn_triangle.png\0");
+	buttons[BTN_LTRIGGER] = textureMgr->loadFromPNG("btn_ltrigg.png\0");
+	buttons[BTN_RTRIGGER] = textureMgr->loadFromPNG("btn_rtrigg.png\0");
+	buttons[BTN_CIRCLE]   = textureMgr->loadFromPNG("btn_circle.png\0");
+	buttons[BTN_STICK]    = textureMgr->loadFromPNG("btn_stick.png\0");
 	return true;
 }
 
@@ -234,8 +253,15 @@ void ClMagicBowlApp::exit(){
 }
 
 
-ClMagicBowlApp::ClMagicBowlApp() {
+ClMagicBowlApp::ClMagicBowlApp()
+: mainMenuTex(0), mainMenuLogo(0), opt3Doff(0), opt3Dred(0), opt3Dgreen(0),
+  arrowLeft(0), arrowRight(0){
 	// TODO Auto-generated constructor stub
+	buttons[0] = 0;
+	buttons[1] = 0;
+	buttons[2] = 0;
+	buttons[3] = 0;
+	buttons[4] = 0;
 }
 
 void ClMagicBowlApp::render(){
@@ -255,7 +281,7 @@ void ClMagicBowlApp::render(){
 		if (!timer->isReset()){
 			timer->reset();
 			//start playing the main sound
-			introMusicId = ClMp3Helper::playMP3("snd/main_menu.mp3",0x5000);
+			introMusicId = ClMp3Helper::playMP3("snd/main_menu.mp3",0x4000);
 			//ClMp3Helper::setMP3Volume(introMusicId, 0x4000);
 		} else {
 			//as the timer is initialized now blend the logo
@@ -352,39 +378,8 @@ void ClMagicBowlApp::render(){
 	 * be set
 	 */
 	case MBA_MAIN_MENU:
-		if (mainMenuTex == 0){
-			mainMenuTex = textureMgr->loadFromPNG("main_menu.png\0");
-		}
-		if (!mainMenu) {
-			//setup the main menu
-			mainMenu = new ClSimpleMenu(100, 70);
-			//create the items
-			ClSimpleMenuItem* item;
-			item = new ClSimpleMenuItem("Start new game", MBA_LOAD_TRAINING);
-			mainMenu->addItem(item);
-			item = new ClSimpleMenuItem("Continue game", MBA_LOAD_GAME);
-			mainMenu->addItem(item);
-			item = new ClSimpleMenuItem("Control", MBA_SHOW_CONTROL);
-			mainMenu->addItem(item);
-			item = new ClSimpleMenuItem("Credits", MBA_SHOW_CREDITS);
-			mainMenu->addItem(item);
-			item = new ClSimpleMenuItem("Options", MBA_SHOW_OPTIONS);
-			mainMenu->addItem(item);
-		}
-		blendTextureToScreen(mainMenuTex, 0x88);
-		menuState = mainMenu->handleMenu();
-
-		//if we have executed a Menu item we act on the selected one
-		//this mean switching the application state
-		if (menuState > 0) currentState = (ApplicationStates)menuState;
-		if (currentState != MBA_MAIN_MENU){
-			//if leaving the menu destroy the same
-			delete(mainMenu);
-			mainMenu = 0;
-		}
-
+		doMainMenu();
 		break;
-
 	/*
 	 * start the training mode
 	 */
@@ -404,14 +399,8 @@ void ClMagicBowlApp::render(){
 		//display the description, not part of the image to be open for multi language support ;o)
 		textHelper->writeTextBlock(SANSERIF_SMALL_REGULAR, trainingLevel->shortInfo, 105, 190, 250);
 		loadBarLen = (150*currentLevel->getInitProgress() / 100);
+		displayProgressBar(170, 251, 150, loadBarLen);
 
-		blendFrameToScreen(170, 251, 150, 2, 0xee111111);
-		blendFrameToScreen(170, 252, 150, 9, 0xee3d3d3d);
-		blendFrameToScreen(170, 261, 150, 3, 0xee717171);
-
-		blendFrameToScreen(170, 251, loadBarLen, 2, 0xeedf7777);
-		blendFrameToScreen(170, 252, loadBarLen, 9, 0xeedf2222);
-		blendFrameToScreen(170, 261, loadBarLen, 3, 0xeedf0000);
 		if (currentLevel->getLevelState() == MBL_INIT_SUCCESS) {
 			//if successfully loaded start the level, or wait for a key pressed ?
 			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 180, 262);
@@ -433,7 +422,6 @@ void ClMagicBowlApp::render(){
 		//TODO:
 		//display level specific image with something like a mission during loading
 		//start the level based on button state
-		textHelper->writeText(SERIF_SMALL_REGULAR, "load level...", 200,100);
 		if (!currentLevel) {
 			currentLevel = new ClLevel(levelData[currLevelId-1], this);
 			currentLevel->initLevel(this->playerInfo.triggerFlipped);
@@ -444,15 +432,12 @@ void ClMagicBowlApp::render(){
 		} else
 			this->blendTextureToScreen(loadingTex, 0xff);
 
-		blendFrameToScreen(170, 251, 150, 2, 0xee111111);
-		blendFrameToScreen(170, 252, 150, 9, 0xee3d3d3d);
-		blendFrameToScreen(170, 261, 150, 3, 0xee717171);
+		//display the description, not part of the image to be open for multi language support ;o)
+		textHelper->writeTextBlock(SANSERIF_SMALL_REGULAR, levelData[currLevelId-1].shortInfo, 105, 190, 250);
 
+		//display progress bar
 		loadBarLen = (150*currentLevel->getInitProgress() / 100);
-
-		blendFrameToScreen(170, 251, loadBarLen, 2, 0xeedf7777);
-		blendFrameToScreen(170, 252, loadBarLen, 9, 0xeedf2222);
-		blendFrameToScreen(170, 261, loadBarLen, 3, 0xeedf0000);
+		displayProgressBar(170, 251, 150, loadBarLen);
 
 		if (currentLevel->getLevelState() == MBL_INIT_SUCCESS) {
 			textHelper->writeText(SERIF_SMALL_REGULAR, "Press (X) to continue", 180, 262);
@@ -500,7 +485,7 @@ void ClMagicBowlApp::render(){
 			}
 			break;
 		case MBL_INIT_SUCCESS:
-			currentLevel->render(playerInfo.red_cyan);//render3D);
+			currentLevel->render(playerInfo.red_cyan);
 			break;
 		case MBL_TASK_FAILED:
 			delete(currentLevel);
@@ -508,7 +493,7 @@ void ClMagicBowlApp::render(){
 			currentState = MBA_LEVEL_FAILED;
 			//display animation of failed level, blocks current thread...
 			//which is as expected ;o)
-			ClMp4Decoder::playMp4("img/lvlFail.mp4", 0);//, PSP_DISPLAY_PIXEL_FORMAT_565);
+			ClMp4Decoder::playMp4("img/lvlFail.mp4", 0);
 			timer->reset();
 			break;
 		case MBL_TASK_FINISHED:
@@ -518,7 +503,10 @@ void ClMagicBowlApp::render(){
 			currentState = MBA_LEVEL_SUCCESS;
 			//if we have done this training we set the first
 			//level active
-			if (currLevelId == (short)0xffff) currLevelId = 1;
+			if (currLevelId == (short)0xffff){
+				currLevelId = 1;
+				this->playerInfo.mana = 0; //no mana after the training...
+			}
 			else
 				//we can increase to the next level
 				currLevelId++;
@@ -526,29 +514,22 @@ void ClMagicBowlApp::render(){
 		}
 		break;
 	case MBA_LEVEL_FAILED:
-		//for 3 seconds display that you have failed this level
+	/*	//for 3 seconds display that you have failed this level
 		if (timer->getDeltaSeconds() < 3.0f
 		    && currLevelId == (short)0xffff) {
 			textHelper->writeText(SANSERIF_BOLD, "Training Failed, try again...", 100, 100);
-		} else {
+		} else {*/
 			//now set the next state
 			if (currLevelId == (short)0xffff)currentState = MBA_LOAD_TRAINING;
 			else currentState = MBA_LEVELFAILED_MENU;
-		}
+		//}
 		break;
 	case MBA_LEVEL_SUCCESS:
 		//if the player has finished a regular level
 		//move to the next one and show some "congrat" info!
 		//for 3 seconds display that you have finished this level
-		if (timer->getDeltaSeconds() < 3.0f) {
-			char text[50];
-			if (currLevelId == 1)
-				sprintf(text, "Training completed...prepare for the challenge.");
-			if (currLevelId<=maxLevelId)
-				sprintf(text, "Prepare for Level %d", currLevelId);
-			else
-				sprintf(text, "Congratulation...Won all levels");
-			textHelper->writeText(SANSERIF_BOLD, text, 100, 100);
+		if (currLevelId == 1 && timer->getDeltaSeconds() < 3.0f){
+				textHelper->writeText(SANSERIF_BOLD, "Training completed...prepare for the challenge.", 50, 100);
 		} else {
 			//now set the next state
 			if (currLevelId > maxLevelId){
@@ -579,7 +560,11 @@ void ClMagicBowlApp::render(){
 			item = new ClSimpleMenuItem("Main Menu", MBA_MAIN_MENU);
 			levelMenu->addItem(item);
 		}
-		textHelper->writeText(SANSERIF_BOLD   ,"Level Succeded", 100, 80);
+		char text[50];
+		if (currLevelId<=maxLevelId)
+			sprintf(text, "Prepare for Level %d", currLevelId);
+
+		textHelper->writeText(SANSERIF_BOLD   ,text, 100, 80);
 		menuState = levelMenu->handleMenu();
 		//if we have executed a Menu item we act on the selected one
 		//this mean switching the application state
@@ -631,69 +616,14 @@ void ClMagicBowlApp::render(){
 		break;
 
 	case MBA_SHOW_CONTROL:
-		/*
-		 * display help text for the explanation of the control
-		 * of the game - and is waiting for the triangle button
-		 */
-		//display the main menu image
-		blendTextureToScreen(mainMenuTex, 0x88);
-		//create a transparent frame the text will be stored on
-		blendFrameToScreen(50, 50, 300, 170, 0x88880000);
-		//now write the text
-		textHelper->writeText(SANSERIF_BOLD   ,"Game Controls", 95, 55);
-		textHelper->writeText(SANSERIF_REGULAR,"_________________", 95, 62);
-		longText = "Your goal is to move the bowl across the platforms into the target zone. To move the bowl you simple need to move the analog stick into the direction the bowl should move to.\nUse L or R Trigger to rotate the view around the bowl.";
-		textHelper->writeTextBlock(SANSERIF_SMALL_REGULAR, longText, 55, 100, 290);
-
-		textHelper->writeText(SANSERIF_SMALL_REGULAR, "Good Luck!", 55, 200);
-
-		textHelper->writeText(SANSERIF_SMALL_BOLD, "Press <triangle> to go back", 270, 270);
-		/*
-		 * do wait for pressing triangle until changing back to mainmenu
-		 */
-		sceCtrlPeekBufferPositive(&pad, 1);
-		//button pressed ?
-		if (pad.Buttons != 0){
-			if (pad.Buttons & PSP_CTRL_TRIANGLE){
-				currentState = MBA_MAIN_MENU;
-			}
-		}
+		doControls();
 		break;
-
 	case MBA_SHOW_CREDITS:
-		/*
-		 * show the credits of the game and may be some copyright statements
-		 */
-		//display the main menu image
-		blendTextureToScreen(mainMenuTex, 0x88);
-		blendFrameToScreen(30, 20, 420, 210, 0x88880000);
-		//now write the text
-		textHelper->writeText(SANSERIF_BOLD   ,"Credits", 95, 25);
-		textHelper->writeText(SANSERIF_REGULAR,"______________", 95, 32);
-
-		longText = "(c) AnMaBaGiMa 2010\nMusic/Soundtracks:                                       =================\nMaintheme: LESIEM Fundamentum (Koellner Lichter 2004)\n Special thanks goes to:                                       ===================\ncooleyes - for mp4 movie playing code                              tekkno_fan  - inspiring the 3D mode                                              pspking.de  - german psp forum                                                   ps2dev.org  - english psp developer forum";
-		textHelper->writeTextBlock(SANSERIF_SMALL_REGULAR, longText, 40, 60, 410);
-
-		//textHelper->writeText(SANSERIF_SMALL_REGULAR, "In Game   - Dj Nicos", 55, 175);
-		{
-		 textHelper->writeText(SANSERIF_SMALL_BOLD, "Press <triangle> to go back", 270, 270);
-		 /*unsigned short triangle[] = {57786, 57787, 57788, 57789, 57790, 0 };
-		 pos = textHelper->writeSymbol(triangle , pos, 270);
-		 textHelper->writeText(SANSERIF_SMALL_BOLD, "to go back", pos, 270);
-		 */
-		}
-		/*
-		 * stay in the state until the triangle was pressed
-		 */
-		sceCtrlPeekBufferPositive(&pad, 1);
-		//button pressed ?
-		if (pad.Buttons != 0){
-			if (pad.Buttons & PSP_CTRL_TRIANGLE){
-				currentState = MBA_MAIN_MENU;
-			}
-		}
+		doCredits();
 		break;
 	case MBA_SHOW_OPTIONS:
+		this->doOptions();
+		break;
 		if (mainMenuTex == 0){
 			mainMenuTex = textureMgr->loadFromPNG("main_menu.png\0");
 		}
@@ -761,6 +691,10 @@ void ClMagicBowlApp::render(){
 			optionMenu = 0;
 		}
 		break;
+	case MBA_SHOW_RENDER_OPTIONS:
+		// render option menu to switch between normal, 3D-cyan and 3D-green
+		this->doRenderOptions();
+		break;
 	default:
 		break;
 	}
@@ -787,12 +721,288 @@ void ClMagicBowlApp::render(){
 #endif
 }
 
+void ClMagicBowlApp::doMainMenu(){
+	short menuState;
+
+	if (mainMenuTex == 0){
+		mainMenuTex = textureMgr->loadFromPNG("main_menu.png\0");
+	}
+	if (mainMenuLogo == 0)
+		mainMenuLogo = textureMgr->loadFromPNG("main_menu_logo.png\0");
+
+	if (!mainMenu) {
+		//setup the main menu
+		mainMenu = new ClSimpleMenu(100, 100);
+		//create the items
+		ClSimpleMenuItem* item;
+		item = new ClSimpleMenuItem("Start new game", MBA_LOAD_TRAINING);
+		mainMenu->addItem(item);
+		item = new ClSimpleMenuItem("Continue game", MBA_LOAD_GAME);
+		mainMenu->addItem(item);
+		item = new ClSimpleMenuItem("Options", MBA_SHOW_OPTIONS);
+		mainMenu->addItem(item);
+		item = new ClSimpleMenuItem("Credits", MBA_SHOW_CREDITS);
+		mainMenu->addItem(item);
+	}
+	blendTextureToScreen(mainMenuTex, 0x88);
+	blendTextureToScreen(mainMenuLogo, 50, 0, 385, 83, 0xff);
+	menuState = mainMenu->handleMenu();
+
+	//if we have executed a Menu item we act on the selected one
+	//this mean switching the application state
+	if (menuState > 0) currentState = (ApplicationStates)menuState;
+	if (currentState != MBA_MAIN_MENU){
+		//if leaving the menu destroy the same
+		delete(mainMenu);
+		mainMenu = 0;
+	}
+}
+
+void ClMagicBowlApp::doOptions(){
+	short menuState;
+
+	if (mainMenuTex == 0)
+		mainMenuTex = textureMgr->loadFromPNG("main_menu.png\0");
+	if (mainMenuTex != 0)
+		blendTextureToScreen(mainMenuTex, 0x88);
+
+	//display default items
+	blendFrameToScreen(0, 0, 480, 20, 0x7fff0000);
+	textHelper->writeText(SANSERIF_BOLD, "Options", 200, 17);
+
+	if (!optionMenu) {
+		//setup the main menu
+		optionMenu = new ClSimpleMenu(100, 70);
+		//create the items
+		ClSimpleMenuItem* item;
+		item = new ClSimpleMenuItem("Graphic options", MBA_SHOW_RENDER_OPTIONS);
+		optionMenu->addItem(item);
+		item = new ClSimpleMenuItem("Controls", MBA_SHOW_CONTROL);
+		optionMenu->addItem(item);
+		item = new ClSimpleMenuItem("Main Menu", MBA_MAIN_MENU);
+		optionMenu->addItem(item);
+	}
+	menuState = optionMenu->handleMenu();
+
+	switch (menuState){
+	case MBA_MAIN_MENU:
+		currentState = MBA_MAIN_MENU;
+		//if leaving the menu destroy the same
+		delete(optionMenu);
+		optionMenu = 0;
+		break;
+	case MBA_SHOW_RENDER_OPTIONS:
+		currentState = MBA_SHOW_RENDER_OPTIONS;
+		break;
+	case MBA_SHOW_CONTROL:
+		currentState = MBA_SHOW_CONTROL;
+		break;
+	default:
+		currentState = MBA_SHOW_OPTIONS;
+		break;
+	}
+}
+
+void ClMagicBowlApp::doControls(){
+	SceCtrlData pad;
+	static SceCtrlData lastPad;
+	char* longText;
+
+	if (mainMenuTex == 0)
+		mainMenuTex = textureMgr->loadFromPNG("main_menu.png\0");
+	if (mainMenuTex != 0)
+		blendTextureToScreen(mainMenuTex, 0x88);
+
+	if (arrowLeft == 0)
+		arrowLeft = textureMgr->loadFromPNG("arrow_left.png\0");
+	if (arrowRight == 0)
+		arrowRight = textureMgr->loadFromPNG("arrow_right.png\0");
+
+	//display default items
+	blendFrameToScreen(0, 0, 480, 20, 0x7fff0000);
+	textHelper->writeText(SANSERIF_BOLD, "Controls", 200, 17);
+
+	//do render the buttons needed to play the game, image + text
+	blendFrameToScreen(30, 35, 420, 210, 0x88880000);
+	blendTextureToScreen(buttons[BTN_STICK], 50, 50, 19, 19, 0xff);
+	textHelper->writeText(SANSERIF_SMALL_REGULAR, "move the bowl", 90, 63);
+	blendTextureToScreen(buttons[BTN_RTRIGGER], 47, 75, 26, 11, 0xff);
+	if (!playerInfo.triggerFlipped)
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "rotate view right", 90, 85);
+	else
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "rotate view left", 90, 85);
+	blendTextureToScreen(buttons[BTN_LTRIGGER], 47, 95, 26, 11, 0xff);
+	if (!playerInfo.triggerFlipped)
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "rotate view left", 90, 105);
+	else
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "rotate view right", 90, 105);
+
+	blendTextureToScreen(buttons[BTN_CIRCLE], 52, 115, 13, 13, 0xff);
+	textHelper->writeText(SANSERIF_SMALL_REGULAR, "use Mana to accelerate the bowl", 90, 125);
+
+	//the small "menu" enable switching of the L/R-Trigger behavior
+	blendFrameToScreen(40, 150, 150, 20, 0x7fff0000);
+	textHelper->writeText(SANSERIF_SMALL_REGULAR, "Rotation behavior", 47, 165);
+
+	blendFrameToScreen(195, 150, 240, 20, 0x7fff0000);
+	if (!playerInfo.triggerFlipped){
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "Standard", 260, 165);
+		blendTextureToScreen(arrowRight, 415, 155, 10, 10, 0xff);
+	} else {
+		blendTextureToScreen(arrowLeft, 200, 155, 10, 10, 0xff);
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "Flipped", 265, 165);
+	}
+
+	blendFrameToScreen(0, 257, 480, 15, 0x7fff0000);
+	if (buttons[BTN_TRIANGLE] != 0)
+		blendTextureToScreen(buttons[BTN_TRIANGLE], 410, 258, 13, 13, 0xff);
+	textHelper->writeText(SANSERIF_SMALL_BOLD, "back", 430, 270);
+
+	//handle the buttons
+	sceCtrlPeekBufferPositive(&pad, 1);
+	//button pressed ?
+	if (pad.Buttons != 0 && pad.Buttons != lastPad.Buttons){
+		if (pad.Buttons & PSP_CTRL_RIGHT && !playerInfo.triggerFlipped){
+			ClMp3Helper::playMP3("snd//whup11.mp3");
+			playerInfo.triggerFlipped = true;
+		}
+		if (pad.Buttons & PSP_CTRL_LEFT && playerInfo.triggerFlipped){
+			ClMp3Helper::playMP3("snd//whup11.mp3");
+			playerInfo.triggerFlipped = false;
+		}
+		if (pad.Buttons & PSP_CTRL_TRIANGLE){
+			//go back to main menu
+			currentState = MBA_SHOW_OPTIONS;
+			ClMp3Helper::playMP3("snd//blubb1.mp3");
+		}
+	}
+	lastPad = pad;
+}
+
+void ClMagicBowlApp::doCredits(){
+	SceCtrlData pad;
+	char* longText;
+
+	if (mainMenuTex == 0)
+		mainMenuTex = textureMgr->loadFromPNG("main_menu.png\0");
+
+	if (mainMenuTex != 0)
+		blendTextureToScreen(mainMenuTex, 0x88);
+
+	//display default items
+	blendFrameToScreen(0, 0, 480, 20, 0x7fff0000);
+	textHelper->writeText(SANSERIF_BOLD, "Credits", 200, 17);
+
+	blendFrameToScreen(0, 257, 480, 15, 0x7fff0000);
+	if (buttons[BTN_TRIANGLE] != 0)
+		blendTextureToScreen(buttons[BTN_TRIANGLE], 410, 258, 13, 13, 0xff);
+	textHelper->writeText(SANSERIF_SMALL_BOLD, "back", 430, 270);
+
+	blendFrameToScreen(30, 35, 420, 210, 0x88880000);
+	//now write the text
+	longText = "(c) AnMaBaGiMa 2010\nMusic/Soundtracks:                                       =================\nMaintheme: LESIEM Fundamentum (Koellner Lichter 2004)\n Special thanks goes to:                                       ===================\ncooleyes - for mp4 movie playing code                              tekkno_fan  - inspiring the 3D mode                                              pspking.de  - german psp forum                                                   ps2dev.org  - english psp developer forum";
+	textHelper->writeTextBlock(SANSERIF_SMALL_REGULAR, longText, 40, 60, 410);
+
+	//handle the buttons
+	sceCtrlPeekBufferPositive(&pad, 1);
+	//button pressed ?
+	if (pad.Buttons != 0){
+		if (pad.Buttons & PSP_CTRL_TRIANGLE){
+			//go back to main menu
+			currentState = MBA_MAIN_MENU;
+			ClMp3Helper::playMP3("snd//blubb1.mp3");
+		}
+	}
+}
+
+void ClMagicBowlApp::doRenderOptions(){
+	SceCtrlData pad;
+	static SceCtrlData lastPad;
+
+	if (mainMenuTex == 0)
+		mainMenuTex = textureMgr->loadFromPNG("main_menu.png\0");
+	if (arrowLeft == 0)
+		arrowLeft = textureMgr->loadFromPNG("arrow_left.png\0");
+	if (arrowRight == 0)
+		arrowRight = textureMgr->loadFromPNG("arrow_right.png\0");
+
+
+	if (mainMenuTex != 0)
+		blendTextureToScreen(mainMenuTex, 0x88);
+
+	//display default items
+	blendFrameToScreen(0, 0, 480, 20, 0x7fff0000);
+	textHelper->writeText(SANSERIF_BOLD, "Graphic options", 180, 17);
+	blendFrameToScreen(30, 35, 420, 210, 0x88880000);
+
+	//the small "menu" enable switching of the L/R-Trigger behavior
+	blendFrameToScreen(45, 200, 150, 20, 0x7fff0000);
+	textHelper->writeText(SANSERIF_SMALL_REGULAR, "Render mode", 50, 215);
+
+	blendFrameToScreen(197, 200, 241, 20, 0x7fff0000);
+	//dependent on the current mode we display the right image
+	switch (playerInfo.red_cyan){
+	case 0:
+		if (opt3Doff == 0)
+			opt3Doff = textureMgr->loadFromPNG("option_3D_off.png\0");
+		if (opt3Doff != 0)
+			blendTextureToScreen(opt3Doff, 45, 40, 393, 157, 0xff);
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "Standard", 260, 215);
+		break;
+	case 1:
+		if (opt3Dred == 0)
+			opt3Dred = textureMgr->loadFromPNG("option_3D_rc.png\0");
+		if (opt3Dred != 0)
+			blendTextureToScreen(opt3Dred, 45, 40, 393, 157, 0xff);
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "3D mode red/cyan", 250, 215);
+		break;
+	case 2:
+		if (opt3Dgreen == 0)
+			opt3Dgreen = textureMgr->loadFromPNG("option_3D_gp.png\0");
+		if (opt3Dgreen != 0)
+			blendTextureToScreen(opt3Dgreen, 45, 40, 393, 157, 0xff);
+		textHelper->writeText(SANSERIF_SMALL_REGULAR, "3D mode pink/green", 245, 215);
+		break;
+	}
+	blendTextureToScreen(arrowRight, 415, 205, 10, 10, 0xff);
+	blendTextureToScreen(arrowLeft, 200, 205, 10, 10, 0xff);
+
+
+	blendFrameToScreen(0, 257, 480, 15, 0x7fff0000);
+	if (buttons[BTN_TRIANGLE] != 0)
+		blendTextureToScreen(buttons[BTN_TRIANGLE], 410, 258, 13, 13, 0xff);
+	textHelper->writeText(SANSERIF_SMALL_BOLD, "back", 430, 270);
+
+	//handle the buttons
+	sceCtrlPeekBufferPositive(&pad, 1);
+	//button pressed ?
+	if (pad.Buttons != 0 && pad.Buttons != lastPad.Buttons){
+		if (pad.Buttons & PSP_CTRL_RIGHT){
+			playerInfo.red_cyan = (playerInfo.red_cyan + 1) % 3;
+			ClMp3Helper::playMP3("snd//whup11.mp3");
+		}
+		if (pad.Buttons & PSP_CTRL_LEFT){
+			if (playerInfo.red_cyan==0) playerInfo.red_cyan = 3;
+			playerInfo.red_cyan = (playerInfo.red_cyan - 1) % 3;
+			ClMp3Helper::playMP3("snd//whup11.mp3");
+		}
+		if (pad.Buttons & PSP_CTRL_TRIANGLE){
+			//go back to option menu
+			currentState = MBA_SHOW_OPTIONS;
+			ClMp3Helper::playMP3("snd//blubb1.mp3");
+		}
+	}
+	lastPad = pad;
+}
+
 ClMagicBowlApp::~ClMagicBowlApp() {
 	// TODO Auto-generated destructor stub
 	delete(timer);
 	//stop the music at least now...
 	if (introMusicId)
 		ClMp3Helper::stopMP3(introMusicId);
+
+	//ClTextureMgr::freeInstance();
 }
 
 void ClMagicBowlApp::clean_instance(){
@@ -897,6 +1107,16 @@ void ClMagicBowlApp::blendFrameToScreen(short  x, short  y, short  width, short 
 	sceGuEnable(GU_DEPTH_TEST);
 }
 
+void ClMagicBowlApp::displayProgressBar(short  x, short  y, short  width, short  progress){
+	blendFrameToScreen(x, y, width, 2, 0xee111111);
+	blendFrameToScreen(x, y+1, width, 9, 0xee3d3d3d);
+	blendFrameToScreen(x, y+10, width, 3, 0xee717171);
+
+	blendFrameToScreen(x, y, progress, 2, 0xeedf7777);
+	blendFrameToScreen(x, y+1, progress, 9, 0xeedf2222);
+	blendFrameToScreen(x, y+10, progress, 3, 0xeedf0000);
+}
+
 void ClMagicBowlApp::initSaveDialogue(SceUtilitySavedataParam* saveData, PspUtilitySavedataMode mode){
 	memset(saveData, 0, sizeof(SceUtilitySavedataParam));
 	saveData->base.size = sizeof(SceUtilitySavedataParam);
@@ -915,7 +1135,7 @@ void ClMagicBowlApp::initSaveDialogue(SceUtilitySavedataParam* saveData, PspUtil
 	strncpy(saveData->key, key, 16);
 	#endif
 
-	strcpy(saveData->gameName,"MAGICBOWL");
+	strcpy(saveData->gameName,"MAGICBOWLV1");
 	strcpy(saveData->saveName,"0000");
 	strcpy(saveData->fileName,"DATA.BIN");
 	saveData->saveNameList = nameMultiple;
@@ -927,10 +1147,13 @@ void ClMagicBowlApp::initSaveDialogue(SceUtilitySavedataParam* saveData, PspUtil
 
 	if (mode == PSP_UTILITY_SAVEDATA_LISTSAVE)
 	{
+		//store data saved in the save game
 		saveGame.level = currLevelId;
+		saveGame.mana = playerInfo.mana;
+
 		strcpy(saveData->sfoParam.title,"MagicBowlSave");
-		strcpy(saveData->sfoParam.savedataTitle,"Level:");
-		sprintf(saveData->sfoParam.detail, "%d", saveGame.level);
+		strcpy(saveData->sfoParam.savedataTitle,"Single player mode");
+		sprintf(saveData->sfoParam.detail, "Level:%d\nMana:%d", saveGame.level, saveGame.mana);
 		//strcpy(saveData->sfoParam.detail,"Details");
 		saveData->sfoParam.parentalLevel = 1;
 		//icon data need to be a full PNG file stream.....
@@ -1006,6 +1229,7 @@ void ClMagicBowlApp::showSaveDialogue(PspUtilitySavedataMode mode){
 			case PSP_UTILITY_DIALOG_FINISHED :
 				if (mode == PSP_UTILITY_SAVEDATA_LISTLOAD){
 					this->currLevelId = this->saveGame.level;
+					this->playerInfo.mana = this->saveGame.mana;
 				}
 			case PSP_UTILITY_DIALOG_NONE :
 				saveRunning = false;

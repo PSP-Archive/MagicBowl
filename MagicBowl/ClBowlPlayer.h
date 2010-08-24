@@ -39,7 +39,7 @@ public:
 	virtual void render();
 
 	void doShadow(std::vector<ClSceneLight*>* lightList);
-	void castShadowVolume(ScePspFVector4* lightPos);
+	void castShadowVolume(ScePspFVector4* lightPos, bool useOnly);
 
 protected:
 	//definition of data provided by collision detection

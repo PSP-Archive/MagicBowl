@@ -85,6 +85,7 @@ public:
 		MBA_SHOW_CONTROL,
 		MBA_SHOW_CREDITS,
 		MBA_SHOW_OPTIONS,
+		MBA_SHOW_RENDER_OPTIONS,
 		MBA_OPT_ENABLE_3D,
 		MBA_OPT_ENABLE_3D_2,
 		MBA_OPT_DISABLE_3D,
@@ -92,6 +93,14 @@ public:
 		MBA_OPT_TRIGGER_FLIPPED
 	}ApplicationStates;
 
+	enum ButtonTexture {
+		BTN_CROSS = 0,
+		BTN_TRIANGLE,
+		BTN_RTRIGGER,
+		BTN_LTRIGGER,
+		BTN_CIRCLE,
+		BTN_STICK
+	};
 	/*
 	 * singleton instantiation
 	 */
@@ -128,10 +137,37 @@ protected:
 	ClMagicBowlApp();
 	virtual ~ClMagicBowlApp();
 
+	/** process the main menu
+	 *
+	 */
+	void doMainMenu();
+
+	/** process Options menu
+	 *
+	 */
+	void doOptions();
+
+	/** process Control settings menu
+	 *
+	 */
+	void doControls();
+
+	/** process Credits menu
+	 *
+	 */
+	void doCredits();
+
+	/** process the render options submenu
+	 *
+	 */
+	void doRenderOptions();
+
 	void blendTextureToScreen(monzoom::Texture* texture, short alpha);
 	void blendTextureToScreen(monzoom::Texture* texture, short x, short y, short width, short height, short alpha);
 
 	void blendFrameToScreen(short x, short y, short width, short height, int color);
+
+	void displayProgressBar(short x, short y, short width, short progress);
 
 	SceUtilitySavedataParam dialog;
 	void showSaveDialogue(PspUtilitySavedataMode mode);
@@ -152,8 +188,11 @@ protected:
 	ClSimpleMenu* levelInGameMenu;
 	monzoom::Texture* introTex;
 	monzoom::Texture* logoTex;
-	monzoom::Texture* mainMenuTex;
+	monzoom::Texture* mainMenuTex, *mainMenuLogo;
 	monzoom::Texture* loadingTex;
+	monzoom::Texture* opt3Doff, *opt3Dred, *opt3Dgreen;
+	monzoom::Texture* buttons[6];
+	monzoom::Texture* arrowLeft, *arrowRight;
 	ApplicationStates currentState;
 	ClSimpleTimer* timer;
 

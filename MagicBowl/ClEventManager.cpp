@@ -40,6 +40,15 @@ bool ClEventManager::triggerEvent(void* triggerObject){
 	return true;
 }
 
+void ClEventManager::resetTrigger(void* triggerObject){
+	unsigned int e;
+	for (e = 0; e <events.size();e++){
+		if (events[e].cbTrigger == triggerObject) {
+			events[e].triggered = false;
+		}
+	}
+}
+
 EventId ClEventManager::registerEvent(void* trigger, void* reciever, EventCallback evtCallback, void* cbParameter){
 	Event newEvent;
 	newEvent.id = events.size()+1;

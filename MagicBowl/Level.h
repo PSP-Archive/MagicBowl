@@ -29,8 +29,11 @@ typedef struct MDLFileData;
 #include "SimpleTimer.h"
 #include <ClTextureMgr.h>
 #include "ClEventManager.h"
+#include <ClParticleFlare.h>
+//#include <pAPI.h>
 
 using namespace monzoom;
+//using namespace PAPI;
 
 class ClMagicBowlApp;
 
@@ -123,6 +126,8 @@ protected:
 	monzoom::ClSceneMgr* levelScene; //the 3D scene of this level
 	ClBowlPlayer* sBowl;
 	ClSceneObject* touchObject;
+
+	//ParticleContext_t particle;
 
 	unsigned int planeCount;
 

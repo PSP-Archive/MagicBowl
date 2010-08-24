@@ -23,6 +23,7 @@ extern "C"{
 #include "TextHelper.h"
 #include "Mp3Helper.h"
 #include <ClAnimMaterialColor.h>
+#include <ClParticleFlare.h>
 
 #include <algorithm>
 
@@ -51,16 +52,6 @@ ClLevel::ClLevel(MDLFileData levelData, ClMagicBowlApp* app) {
 	sceGuDisable(GU_LIGHT1);
 	sceGuDisable(GU_LIGHT2);
 	sceGuDisable(GU_LIGHT3);
-	/*
-	sceGuEnable(GU_LIGHT0);
-	//set the kind of light 0
-	ScePspFVector3 light0;
-	light0.x = lvlFileData.lightPosX;
-	light0.y = lvlFileData.lightPosY;
-	light0.z = lvlFileData.lightPosZ;
-	sceGuLight(0,GU_POINTLIGHT,GU_DIFFUSE_AND_SPECULAR,&light0);
-	sceGuLightColor(0, GU_DIFFUSE_AND_SPECULAR, lvlFileData.lightColor);
-	*/
 	sceGuShadeModel(GU_SMOOTH);
 	ClMagicBowlApp::initRenderTarget();
 
@@ -75,7 +66,7 @@ ClLevel::ClLevel(MDLFileData levelData, ClMagicBowlApp* app) {
 	firstRender = true;
 	viewAngle = 0.0f;
 	r3dAngle = 0.75;//1.25f;
-	viewDistance = 80.0f;
+	viewDistance = 100.0f;
 
 	initProgress = 0;
 	this->app = app;
@@ -145,6 +136,14 @@ void ClLevel::render(short red_cyan){
 	if (firstRender){
 		firstRender = false;
 
+		//TEST
+/*
+	    // Make a particle group
+	    int particle_handle = particle.GenParticleGroups(1, 1000);
+
+	    particle.CurrentGroup(particle_handle);
+		//TEST
+	*/
 		//if the first render pass is called we try to sort the object list
 		//to make sure transparent objects are rendered last
 		std::vector<ClSceneObject*>* scene;
@@ -196,10 +195,7 @@ void ClLevel::render(short red_cyan){
 	ScePspFMatrix4 lightView;
 
 	bowlPos = sBowl->getPosition();
-/*
-	//render the shadow cast into offscreen texture
-	this->renderPassBowlShadowCast(&bowlPos, &lightProjInf, &lightView);
-*/
+
 	//for subsequential render passes we place the camera to look
 	//from a given distance at the bowl
 	ScePspFVector3 camPos = {0.0f, 0.0f, -viewDistance};
@@ -240,6 +236,102 @@ void ClLevel::render(short red_cyan){
 	}
 
 	levelScene->render();
+/*
+	//NEW Particle Testing
+	particle.Velocity(PDCylinder(pVec(0.0f, 0.0f, 0.0f), pVec(0.0f, 2.50f, 0.0f), 1.021f, 0.019f));
+	particle.Color(PDLine(pVec(1.0f, 1.0f, 1.0f), pVec(1.0f, 1.0f, 0.3f)));
+	particle.Source(100, PDLine(pVec(0.0f, 0.0f, 0.0f), pVec(0.0f, 0.5f, 0.0f)));
+	particle.Gravity(pVec(0.0f, -0.08f, 0.0f));
+
+	particle.Sink(false, PDPlane(pVec(0,-1,0), pVec(0,1,0)));
+	//particle.KillOld(10.0f, false);
+	particle.Move(true, false);
+
+
+	//render the particles
+	{
+		ColorFVertex *verts;
+		ScePspFMatrix4 viewMatrix;
+
+		sceGumMatrixMode(GU_VIEW);
+		sceGumStoreMatrix(&viewMatrix);
+		sceGumMatrixMode(GU_MODEL);
+		sceGumLoadIdentity();
+		sceGuDisable(GU_CULL_FACE);
+
+		//disabling the z-test does allow smooth particles across the scene
+		//independent of there real depth where the transparency does have negative impact if
+		//they are rendered not in the best z-order. However, the side effect would be that the
+		//particles are visible through all objects and seem to be always in front of them
+		//try to overcome this issue in enabling depth test on the scene but do not fill depth buffer with
+		//particles - this solves both issues
+		sceGuDepthMask(true);
+		sceGuDisable(GU_TEXTURE_2D);
+
+		//we would like to render a particle always as frontfacing to the view
+		//therefore we would need to calculate the diamont to be created based on the view orientation
+		//this one is given as the view matrix.
+		ScePspFVector4 rl, fb;
+		ScePspFMatrix4 viewInvers;
+
+		gumFastInverse(&viewInvers, &viewMatrix);
+		rl = viewInvers.x;
+		fb = viewInvers.y;
+
+		size_t cnt = particle.GetGroupCount();
+		float *ptr;
+		size_t flstride, pos3Ofs, posB3Ofs, size3Ofs, vel3Ofs, velB3Ofs, color3Ofs, alpha1Ofs, age1Ofs, up3Ofs, rvel3Ofs, upB3Ofs, mass1Ofs, data1Ofs;
+		if (cnt > 0){
+			cnt = particle.GetParticlePointer(ptr, flstride, pos3Ofs, posB3Ofs,
+				size3Ofs, vel3Ofs, velB3Ofs, color3Ofs, alpha1Ofs, age1Ofs,
+				up3Ofs, rvel3Ofs, upB3Ofs, mass1Ofs, data1Ofs);
+			if(cnt > 0) {
+				//cnt contains the number of particles neesd to be drawn
+				//ptr is the pomter to the data and the ofs set the stzart position of the
+				//data within the memory space
+				//we need to convert the particles into vertices
+				for (int p = 0; p < cnt; p++){
+					verts = (ColorFVertex*)sceGuGetMemory(sizeof(ColorFVertex)*6);
+					//float age = ptr[age1Ofs+p*flstride];
+					//center of the particle being transparent dependend on the energy of the particle
+					verts[0].x = ptr[pos3Ofs+p*flstride];
+					verts[0].y = ptr[pos3Ofs+p*flstride+1];
+					verts[0].z = ptr[pos3Ofs+p*flstride+2];
+					verts[0].color = GU_COLOR(ptr[color3Ofs+p*flstride], ptr[color3Ofs+p*flstride+1], ptr[color3Ofs+p*flstride+2], 1.0f);//ptr[color3Ofs+p*flstride+3]);//]1.0f);
+
+					verts[1].x = verts[0].x + ptr[size3Ofs+p*flstride]*rl.x;
+					verts[1].y = verts[0].y + ptr[size3Ofs+p*flstride]*rl.y;
+					verts[1].z = verts[0].z + ptr[size3Ofs+p*flstride]*rl.z;
+					verts[1].color = verts[0].color & 0x00ffffff;
+
+					verts[2].x = verts[0].x + ptr[size3Ofs+p*flstride]*fb.x;
+					verts[2].y = verts[0].y + ptr[size3Ofs+p*flstride]*fb.y;
+					verts[2].z = verts[0].z + ptr[size3Ofs+p*flstride]*fb.z;
+					verts[2].color = verts[0].color & 0x00ffffff;
+
+					verts[3].x = verts[0].x - ptr[size3Ofs+p*flstride]*rl.x;
+					verts[3].y = verts[0].y - ptr[size3Ofs+p*flstride]*rl.y;
+					verts[3].z = verts[0].z - ptr[size3Ofs+p*flstride]*rl.z;
+					verts[3].color = verts[0].color & 0x00ffffff;
+
+					verts[4].x = verts[0].x - ptr[size3Ofs+p*flstride]*fb.x;
+					verts[4].y = verts[0].y - ptr[size3Ofs+p*flstride]*fb.y;
+					verts[4].z = verts[0].z - ptr[size3Ofs+p*flstride]*fb.z;
+					verts[4].color = verts[0].color & 0x00ffffff;
+
+					verts[5] = verts[1];
+
+					sceGumDrawArray(GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 6, 0, verts);
+
+
+				}
+			}
+		}
+		sceGuEnable(GU_CULL_FACE);
+		sceGuDepthMask(false);
+	}
+	//END ParticleTesting
+*/
 
 	//in case of red_cyan we need to pass the offscreen onto screen and render the scene a second
 	//time with a bit different camera position
@@ -368,62 +460,6 @@ void ClLevel::render(short red_cyan){
 		//do not handle pad if we are in pause mode
 		handlePad();
 	}
-	/*
-
-	this->renderPassObjectsNormal();
-
-	//now render the scene s shadow receiver
-	this->renderPassObjectsShadowReciever(&lightProjInf, &lightView);
-
-	this->renderPassBowlNormal();
-
-	//once we have finished all rendering check for keys pressed
-	//and handle them
-	handlePad();
-	//if the bowl touches the target plane than we have successfully
-	//finished this task
-	int planeType = bowl->getTouchedPlaneType(this->planes);
-	switch (planeType){
-	case MB_PLANE_TARGET:
-		//we have recieved the final plane
-		currentState = MBL_TASK_FINISHED;
-		return;
-		break;
-	case MB_PLANE_SWITCH_ACTIVE:
-		//we have reached a switch plane which is active now
-		//play the sound
-		if (!switchSoundPlaying){
-			ClMp3Helper::playMP3("switch_activate.mp3", 0x8000);
-			switchSoundPlaying = true;
-		}
-		//get the action target of this activation
-		int planeId = bowl->getTouchedPlaneId();
-		for (int t=0;t<this->planeCount;t++){
-			if (opMap[t].objectId == opMap[planeId].actionTargetObjectId){
-				//set the target plane to normal to get it activated
-				planes[opMap[t].planeId]->setType(MB_PLANE_NORMAL);
-			}
-		}
-	}
-	//if the bowl position falls underneath -50 than we have failed the level
-	if (bowlPos.y < -100.0f){
-		currentState = MBL_TASK_FAILED;
-		return;
-	}
-	//check if we are close to an inactive plane - in the first levels
-	//we will print a help text for this
-	for (int p=0;p<this->planeCount;p++){
-		planeType = planes[p]->getType();
-		switch (planeType){
-			case MB_PLANE_INACTIVE:
-				if (planes[p]->getDistanceTo(&bowlPos) < 15.0f){
-					clTextHelper* text = clTextHelper::getInstance();
-					text->writeText(SERIF_SMALL_REGULAR, "You need to find the switch\nto activate the bridge", 100, 100);
-				}
-				break;
-		}
-	}
-	*/
 }
 
 /*
@@ -481,6 +517,11 @@ void ClLevel::handlePad(){
 			if (app->playerInfo.mana > 0){
 				app->playerInfo.mana--;
 				sBowl->applyBoost(2.0f);
+				//if boost is active start bowl animation (texture)
+				ClEventManager::triggerEvent(sBowl);
+				//as this event should be able to be re-triggered
+				//we reset the triggered flag
+				ClEventManager::resetTrigger(sBowl);
 			}
 
 		}
@@ -718,16 +759,25 @@ int ClLevel::initThread(SceSize args, void *argp){
 	level->sBowl->setMaterial(bowlTex);*/
 	level->levelScene->addStaticSceneObject(level->sBowl);
 	//delay the current thread to allow main thread continuing
-	sceKernelDelayThread(50000);//half a second
+	sceKernelDelayThread(10000);//half a second
 
 	level->initProgress = 50;
+	//do set some of the scene objects to cast shadows
+	std::vector<ClSceneObject*>* objects = level->levelScene->getChildsRef();
+	for (int o=0;o<objects->size();o++){
+		level->initProgress = 50 + 30*o/objects->size();
+		//all objects except the outbox casting shadows
+		if ( strstr(objects->at(o)->getName(), "OutBox")==0 )
+			objects->at(o)->setCastShadow(true);
+	}
+	level->initProgress = 80;
 
 	level->timerTex = ClTextureMgr::getInstance()->loadFromPNG("Timer.png");
 	level->manaTex = ClTextureMgr::getInstance()->loadFromPNG("Mana.png");
 
-	sceKernelDelayThread(50000);
+	sceKernelDelayThread(10000);
 
-	level->initProgress = 70;
+	level->initProgress = 85;
 	//now setup the actions for good performance
 	ClStaticSceneObject* target;
 	for (unsigned short a = 0;a < level->lvlFileData.actions; a++){
