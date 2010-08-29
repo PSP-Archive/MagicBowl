@@ -142,6 +142,21 @@ protected:
 	 */
 	void doMainMenu();
 
+	/** process the running level
+	 *
+	 */
+	void doLevel();
+
+	/** process menu between 2 levels
+	 *
+	 */
+	void doLevelMenu();
+
+	/** process menu if level was failed
+	 *
+	 */
+	void doLevelFailedMenu();
+
 	/** process Options menu
 	 *
 	 */

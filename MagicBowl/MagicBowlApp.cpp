@@ -270,7 +270,7 @@ void ClMagicBowlApp::render(){
 	short menuState;
 	int mp4Res;
 	char* longText;
-
+	monzoom::Texture* background;
 	switch (currentState){
 	/*
 	 * Initial state of the application, display intro and switch
@@ -388,7 +388,7 @@ void ClMagicBowlApp::render(){
 		//and a screen of the level may be ?
 		if (!currentLevel){
 			currLevelId = 0xffff;
-			currentLevel = new ClLevel(*trainingLevel, this);//levelData[currLevelId-1], this);//
+			currentLevel = new ClLevel(currLevelId,*trainingLevel, this);//levelData[currLevelId-1], this);//
 			currentLevel->initLevel(this->playerInfo.triggerFlipped);
 		}
 		if (loadingTex == 0){
@@ -408,6 +408,7 @@ void ClMagicBowlApp::render(){
 			if (pad.Buttons && pad.Buttons & PSP_CTRL_CROSS){
 				currentState = MBA_RUN_LEVEL;
 				loadingTex = 0;
+				playerInfo.mana = 0;
 				//if (introMusicId)
 					//	ClMp3Helper::stopMP3(introMusicId);
 				//introMusicId = ClMp3Helper::playMP3("snd/Training.mp3", 0x5000);
@@ -423,7 +424,7 @@ void ClMagicBowlApp::render(){
 		//display level specific image with something like a mission during loading
 		//start the level based on button state
 		if (!currentLevel) {
-			currentLevel = new ClLevel(levelData[currLevelId-1], this);
+			currentLevel = new ClLevel(currLevelId,levelData[currLevelId-1], this);
 			currentLevel->initLevel(this->playerInfo.triggerFlipped);
 		}
 
@@ -449,70 +450,9 @@ void ClMagicBowlApp::render(){
 		}
 		break;
 	case MBA_RUN_LEVEL:
-		//first check for level state
-		short lvlState;
-		lvlState = currentLevel->getLevelState();
-		switch (lvlState){
-		case MBL_INGAME_MENU:
-			//render the level, and blend in game menu over it
-			currentLevel->render(playerInfo.red_cyan);
-			if (!levelInGameMenu) {
-				//setup the main menu
-				levelInGameMenu = new ClSimpleMenu(100, 100);
-				//create the items
-				ClSimpleMenuItem* item;
-				item = new ClSimpleMenuItem("Continue", MBL_INIT_SUCCESS);
-				levelInGameMenu->addItem(item);
-				item = new ClSimpleMenuItem("Restart Level", MBL_TASK_FAILED);
-				levelInGameMenu->addItem(item);
-				item = new ClSimpleMenuItem("Leave Level", MBA_MAIN_MENU);
-				levelInGameMenu->addItem(item);
-			}
-			blendFrameToScreen(0, 0, 480, 270, 0x99000000);
-			textHelper->writeText(SANSERIF_BOLD   ,"Level Paused", 100, 80);
-			menuState = levelInGameMenu->handleMenu();
-			if (menuState>=0){
-				if (menuState == MBA_MAIN_MENU){
-					currentState = MBA_MAIN_MENU;
-					delete(currentLevel);
-					currentLevel=0;
-				}
-				else
-					currentLevel->setLevelState((LevelStates)menuState);
-
-				delete(levelInGameMenu);
-				levelInGameMenu = 0;
-			}
-			break;
-		case MBL_INIT_SUCCESS:
-			currentLevel->render(playerInfo.red_cyan);
-			break;
-		case MBL_TASK_FAILED:
-			delete(currentLevel);
-			currentLevel=0;
-			currentState = MBA_LEVEL_FAILED;
-			//display animation of failed level, blocks current thread...
-			//which is as expected ;o)
-			ClMp4Decoder::playMp4("img/lvlFail.mp4", 0);
-			timer->reset();
-			break;
-		case MBL_TASK_FINISHED:
-			delete(currentLevel);
-			currentLevel=0;
-			timer->reset();
-			currentState = MBA_LEVEL_SUCCESS;
-			//if we have done this training we set the first
-			//level active
-			if (currLevelId == (short)0xffff){
-				currLevelId = 1;
-				this->playerInfo.mana = 0; //no mana after the training...
-			}
-			else
-				//we can increase to the next level
-				currLevelId++;
-			break;
-		}
+		doLevel();
 		break;
+
 	case MBA_LEVEL_FAILED:
 	/*	//for 3 seconds display that you have failed this level
 		if (timer->getDeltaSeconds() < 3.0f
@@ -528,8 +468,17 @@ void ClMagicBowlApp::render(){
 		//if the player has finished a regular level
 		//move to the next one and show some "congrat" info!
 		//for 3 seconds display that you have finished this level
-		if (currLevelId == 1 && timer->getDeltaSeconds() < 3.0f){
-				textHelper->writeText(SANSERIF_BOLD, "Training completed...prepare for the challenge.", 50, 100);
+		if (currLevelId == 1 && timer->getDeltaSeconds() < 4.0f){
+			background = textureMgr->loadFromPNG("SURF20.png\0");
+			if (background)
+				blendTextureToScreen(background, 0xff);
+			textHelper->writeTextBlock(SANSERIF_BOLD, "Training completed...\nDo prepare for the challenge.", 50, 100, 400);
+		} else
+		if (currLevelId > this->maxLevelId && timer->getDeltaSeconds() < 8.0f){
+			background = textureMgr->loadFromPNG("SUN02.png\0");
+			if (background)
+				blendTextureToScreen(background, 0xff);
+			textHelper->writeTextBlock(SANSERIF_BOLD, "Congratulation.\nYou have succeded for now.\n But do carefully look forward to your future...",50,100,400);
 		} else {
 			//now set the next state
 			if (currLevelId > maxLevelId){
@@ -548,52 +497,10 @@ void ClMagicBowlApp::render(){
 	 * save the current state...
 	 */
 	case MBA_LEVEL_MENU:
-		if (!levelMenu) {
-			//setup the main menu
-			levelMenu = new ClSimpleMenu(100, 100);
-			//create the items
-			ClSimpleMenuItem* item;
-			item = new ClSimpleMenuItem("Continue", MBA_LOAD_LEVEL);
-			levelMenu->addItem(item);
-			item = new ClSimpleMenuItem("Save", MBA_SAVE_GAME);
-			levelMenu->addItem(item);
-			item = new ClSimpleMenuItem("Main Menu", MBA_MAIN_MENU);
-			levelMenu->addItem(item);
-		}
-		char text[50];
-		if (currLevelId<=maxLevelId)
-			sprintf(text, "Prepare for Level %d", currLevelId);
-
-		textHelper->writeText(SANSERIF_BOLD   ,text, 100, 80);
-		menuState = levelMenu->handleMenu();
-		//if we have executed a Menu item we act on the selected one
-		//this mean switching the application state
-		if (menuState > 0) currentState = (ApplicationStates)menuState;
-		if (currentState!=MBA_LEVEL_MENU){
-			delete(levelMenu);
-			levelMenu = 0;
-		}
+		doLevelMenu();
 		break;
 	case MBA_LEVELFAILED_MENU:
-		if (!levelMenu) {
-			//setup the main menu
-			levelMenu = new ClSimpleMenu(100, 100);
-			//create the items
-			ClSimpleMenuItem* item;
-			item = new ClSimpleMenuItem("Try again", MBA_LOAD_LEVEL);
-			levelMenu->addItem(item);
-			item = new ClSimpleMenuItem("Main Menu", MBA_MAIN_MENU);
-			levelMenu->addItem(item);
-		}
-		textHelper->writeText(SANSERIF_BOLD   ,"Level Failed", 100, 80);
-		menuState = levelMenu->handleMenu();
-		//if we have executed a Menu item we act on the selected one
-		//this mean switching the application state
-		if (menuState > 0) currentState = (ApplicationStates)menuState;
-		if (currentState!=MBA_LEVELFAILED_MENU){
-			delete(levelMenu);
-			levelMenu = 0;
-		}
+		doLevelFailedMenu();
 		break;
 
 	case MBA_SAVE_GAME:
@@ -622,74 +529,7 @@ void ClMagicBowlApp::render(){
 		doCredits();
 		break;
 	case MBA_SHOW_OPTIONS:
-		this->doOptions();
-		break;
-		if (mainMenuTex == 0){
-			mainMenuTex = textureMgr->loadFromPNG("main_menu.png\0");
-		}
-		if (!optionMenu) {
-			//setup the main menu
-			optionMenu = new ClSimpleMenu(100, 70);
-			//create the items
-			ClSimpleMenuItem* item;
-			if (!playerInfo.red_cyan)
-				item = new ClSimpleMenuItem("Enable 3D (cyan)", MBA_OPT_ENABLE_3D);
-			else if (playerInfo.red_cyan == 1)
-				item = new ClSimpleMenuItem("Enable 3D (green)", MBA_OPT_ENABLE_3D_2);
-			else
-				item = new ClSimpleMenuItem("Disable 3D", MBA_OPT_DISABLE_3D);
-
-			optionMenu->addItem(item);
-
-			if (!playerInfo.triggerFlipped)
-				item = new ClSimpleMenuItem("Flip Trigger Rotation", MBA_OPT_TRIGGER_FLIPPED);
-			else
-				item = new ClSimpleMenuItem("Reset Trigger Rotation", MBA_OPT_TRIGGER_NORMAL);
-
-			optionMenu->addItem(item);
-			item = new ClSimpleMenuItem("Main Menu", MBA_MAIN_MENU);
-			optionMenu->addItem(item);
-		}
-		blendTextureToScreen(mainMenuTex, 0x88);
-		menuState = optionMenu->handleMenu();
-		//if we have executed a Menu item we act on the selected one
-		//this mean switching the application state
-		if (menuState == MBA_MAIN_MENU){
-			currentState = MBA_MAIN_MENU;
-			//if leaving the menu destroy the same
-			delete(optionMenu);
-			optionMenu = 0;
-		}
-		if (menuState == MBA_OPT_ENABLE_3D){
-			playerInfo.red_cyan = 1;
-			//if leaving the menu destroy the same
-			delete(optionMenu);
-			optionMenu = 0;
-		}
-		if (menuState == MBA_OPT_ENABLE_3D_2){
-			playerInfo.red_cyan = 2;
-			//if leaving the menu destroy the same
-			delete(optionMenu);
-			optionMenu = 0;
-		}
-		if (menuState == MBA_OPT_DISABLE_3D){
-			playerInfo.red_cyan = false;
-			//if leaving the menu destroy the same
-			delete(optionMenu);
-			optionMenu = 0;
-		}
-		if (menuState == MBA_OPT_TRIGGER_FLIPPED){
-			playerInfo.triggerFlipped = true;
-			//if leaving the menu destroy the same
-			delete(optionMenu);
-			optionMenu = 0;
-		}
-		if (menuState == MBA_OPT_TRIGGER_NORMAL){
-			playerInfo.triggerFlipped = false;
-			//if leaving the menu destroy the same
-			delete(optionMenu);
-			optionMenu = 0;
-		}
+		doOptions();
 		break;
 	case MBA_SHOW_RENDER_OPTIONS:
 		// render option menu to switch between normal, 3D-cyan and 3D-green
@@ -755,6 +595,140 @@ void ClMagicBowlApp::doMainMenu(){
 		//if leaving the menu destroy the same
 		delete(mainMenu);
 		mainMenu = 0;
+	}
+}
+
+void ClMagicBowlApp::doLevel(){
+	//first check for level state
+	short lvlState;
+	short menuState;
+
+	lvlState = currentLevel->getLevelState();
+	switch (lvlState){
+	case MBL_INGAME_MENU:
+		//render the level, and blend in game menu over it
+		currentLevel->render(playerInfo.red_cyan);
+		if (!levelInGameMenu) {
+			//setup the main menu
+			levelInGameMenu = new ClSimpleMenu(100, 100);
+			//create the items
+			ClSimpleMenuItem* item;
+			item = new ClSimpleMenuItem("Continue", MBL_INIT_SUCCESS);
+			levelInGameMenu->addItem(item);
+			item = new ClSimpleMenuItem("Restart Level", MBL_TASK_FAILED);
+			levelInGameMenu->addItem(item);
+			item = new ClSimpleMenuItem("Leave Level", MBA_MAIN_MENU);
+			levelInGameMenu->addItem(item);
+		}
+		blendFrameToScreen(0, 0, 480, 270, 0x99000000);
+		textHelper->writeText(SANSERIF_BOLD   ,"Level Paused", 100, 80);
+		menuState = levelInGameMenu->handleMenu();
+		if (menuState>=0){
+			if (menuState == MBA_MAIN_MENU){
+				currentState = MBA_MAIN_MENU;
+				delete(currentLevel);
+				currentLevel=0;
+			}
+			else
+				currentLevel->setLevelState((LevelStates)menuState);
+
+			delete(levelInGameMenu);
+			levelInGameMenu = 0;
+		}
+		break;
+	case MBL_INIT_SUCCESS:
+		currentLevel->render(playerInfo.red_cyan);
+		break;
+	case MBL_TASK_FAILED:
+		delete(currentLevel);
+		currentLevel=0;
+		currentState = MBA_LEVEL_FAILED;
+		//display animation of failed level, blocks current thread...
+		//which is as expected ;o)
+		ClMp4Decoder::playMp4("img/lvlFail.mp4", 0);
+		timer->reset();
+		break;
+	case MBL_TASK_FINISHED:
+		delete(currentLevel);
+		currentLevel=0;
+		timer->reset();
+		currentState = MBA_LEVEL_SUCCESS;
+		//if we have done this training we set the first
+		//level active
+		if (currLevelId == (short)0xffff){
+			currLevelId = 1;
+			this->playerInfo.mana = 0; //no mana after the training...
+		}
+		else
+			//we can increase to the next level
+			currLevelId++;
+		break;
+	}
+}
+
+void ClMagicBowlApp::doLevelMenu(){
+	short menuState;
+
+	monzoom::Texture* background = textureMgr->loadFromPNG("PLANET17.png\0");
+	blendTextureToScreen(background, 0xff);
+
+	if (!levelMenu) {
+		//setup the main menu
+		levelMenu = new ClSimpleMenu(100, 100);
+		//create the items
+		ClSimpleMenuItem* item;
+		item = new ClSimpleMenuItem("Continue", MBA_LOAD_LEVEL);
+		levelMenu->addItem(item);
+		item = new ClSimpleMenuItem("Save", MBA_SAVE_GAME);
+		levelMenu->addItem(item);
+		item = new ClSimpleMenuItem("Main Menu", MBA_MAIN_MENU);
+		levelMenu->addItem(item);
+	}
+	char text[50];
+	if (currLevelId<=maxLevelId)
+		sprintf(text, "Prepare for Level %d", currLevelId);
+
+	textHelper->writeText(SANSERIF_BOLD   ,text, 100, 80);
+	menuState = levelMenu->handleMenu();
+	//if we have executed a Menu item we act on the selected one
+	//this mean switching the application state
+	if (menuState > 0) currentState = (ApplicationStates)menuState;
+	if (currentState!=MBA_LEVEL_MENU){
+		delete(levelMenu);
+		levelMenu = 0;
+		//release some resources
+		textureMgr->freeTexture(background->id);
+	}
+}
+
+void ClMagicBowlApp::doLevelFailedMenu(){
+	short menuState;
+
+	monzoom::Texture* background = textureMgr->loadFromPNG("SURF22.png\0");
+	blendTextureToScreen(background, 0xff);
+
+	if (!levelMenu) {
+		//setup the main menu
+		levelMenu = new ClSimpleMenu(100, 100);
+		//create the items
+		ClSimpleMenuItem* item;
+		item = new ClSimpleMenuItem("Try again", MBA_LOAD_LEVEL);
+		levelMenu->addItem(item);
+		item = new ClSimpleMenuItem("Main Menu", MBA_MAIN_MENU);
+		levelMenu->addItem(item);
+	}
+	textHelper->writeText(SANSERIF_BOLD   ,"Level Failed", 100, 80);
+	menuState = levelMenu->handleMenu();
+	//if we have executed a Menu item we act on the selected one
+	//this mean switching the application state
+	if (menuState > 0) {
+		currentState = (ApplicationStates)menuState;
+	}
+	if (currentState!=MBA_LEVELFAILED_MENU){
+		delete(levelMenu);
+		levelMenu = 0;
+		//release texture resource
+		textureMgr->freeTexture(background->id);
 	}
 }
 
@@ -990,6 +964,19 @@ void ClMagicBowlApp::doRenderOptions(){
 			//go back to option menu
 			currentState = MBA_SHOW_OPTIONS;
 			ClMp3Helper::playMP3("snd//blubb1.mp3");
+			//release some resources
+			if (opt3Doff){
+				textureMgr->freeTexture(opt3Doff->id);
+				opt3Doff = 0;
+			}
+			if (opt3Dred){
+				textureMgr->freeTexture(opt3Dred->id);
+				opt3Dred = 0;
+			}
+			if(opt3Dgreen){
+				textureMgr->freeTexture(opt3Dgreen->id);
+				opt3Dgreen = 0;
+			}
 		}
 	}
 	lastPad = pad;

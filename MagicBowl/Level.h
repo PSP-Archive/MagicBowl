@@ -73,14 +73,14 @@ typedef struct ActionData{
 	EventId event;
 }ActionData;
 
-#define MAX_MANA 5000
+#define MAX_MANA 2500
 
 class ClLevel {
 public:
 	/*
 	 * Default Constructor of the level
 	 */
-	ClLevel(MDLFileData levelData, ClMagicBowlApp* app);
+	ClLevel(unsigned short id, MDLFileData levelData, ClMagicBowlApp* app);
 	/*
 	 * will start the asynch initialization
 	 */
@@ -108,10 +108,15 @@ public:
 	 */
 	void setLevelState(LevelStates newState);
 
+	/** event receiver method
+	 *
+	 */
+	static void eventReciever(void* thisPtr, void* evtParam);
 protected:
 	/*
 	 * Member attributes
 	 */
+	unsigned short id;
 	ClMagicBowlApp* app; //my parent App...
 	MDLFileData lvlFileData;
 	struct ThreadParams {
@@ -127,7 +132,7 @@ protected:
 	ClBowlPlayer* sBowl;
 	ClSceneObject* touchObject;
 
-	//ParticleContext_t particle;
+	//ParticleContext_t *particle;
 
 	unsigned int planeCount;
 

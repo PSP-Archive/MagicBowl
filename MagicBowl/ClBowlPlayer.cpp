@@ -204,6 +204,27 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 		delete(collInfo.collPlane);
 		collInfo.collPlane = 0;
 	}
+	short collCheckCount = 0;
+	CollisionInfo lastCollInfo;
+	//as long as there was a collision found, but only up to 3 times
+	//we handle the collision and do a check again
+	while (this->collisionDetection(&collInfo, &direction, this->world->getChilds())
+			&& collCheckCount < 4){
+
+		collisionHandling(&collInfo, gravity);
+		//store the current collision info
+		lastCollInfo = collInfo;
+		collCheckCount++;
+	}
+	//in case there was at least one collision found set the info accordningly
+	if (collCheckCount){
+		collInfo = lastCollInfo;
+
+		//the target direction vector will be used now to calculate the
+		//rotation axis of the bowl
+		ClVectorHelper::crossProduct(&rollAxis, &direction, &collInfo.collPlane->normal);
+	}
+	/*
 	if (this->collisionDetection(&collInfo, &direction, this->world->getChilds())){
 
 		collisionHandling(&collInfo, gravity);
@@ -222,7 +243,7 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 		//the target direction vector will be used now to calculate the
 		//rotation axis of the bowl
 		ClVectorHelper::crossProduct(&rollAxis, &direction, &collInfo.collPlane->normal);
-	}
+	}*/
 	{
 		// move to the next position but slow down the movement a small peace each time
 		ClVectorHelper::scale(&direction, 0.985f);
@@ -232,8 +253,9 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 	}
 	if (collInfo.foundColl){
 		//if the touched object is an animated one the object movement will impact the bowl movement
-		const char* className = typeid(*collInfo.collObject).name();
-		if (strstr(className, "ClAnimatedSceneObject") != 0){
+		//const char* className = typeid(*collInfo.collObject).name();
+		//if (strstr(className, "ClAnimatedSceneObject") != 0){
+		if (collInfo.collObject->getObjectType() == 2){
 			//if the object is an animated one we apply the object movement to the bowl as well
 			const ScePspFVector4* oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
 			//if we touched this object the first time get the direction a second time to initialize the
@@ -257,8 +279,9 @@ ClSceneObject* ClBowlPlayer::move(float gravity){
 		//if the last collision object was an animated one we need to check whether we need to move the bowl
 		//with this object as it is just moving down (the bowl is lying on it)
 		if (collInfo.lastCollObject){
-			const char* className = typeid(*collInfo.lastCollObject).name();
-			if (strstr(className, "ClAnimatedSceneObject") != 0){
+			//const char* className = typeid(*collInfo.lastCollObject).name();
+			//if (strstr(className, "ClAnimatedSceneObject") != 0){
+			if (collInfo.lastCollObject->getObjectType() == 2) {
 				const ScePspFVector4* oDir = ((ClAnimatedSceneObject*)collInfo.collObject)->getDirPerFrame();
 				//do we have a movement on y direction ?
 				if (oDir->y < 0.0f){
@@ -374,8 +397,9 @@ bool ClBowlPlayer::collisionDetection(CollisionInfo* collInfo, ScePspFVector4* d
 			skipTriangle = false;
 			//in case the object is an animated one we need to retrieve the relative
 			//position
-			const char* className = typeid(*objectList[t]).name();
-			if (strstr(className, "ClAnimatedSceneObject") != 0){
+			//const char* className = typeid(*objectList[t]).name();
+			//if (strstr(className, "ClAnimatedSceneObject") != 0){
+			if (objectList[t]->getObjectType() == 2) {
 				oPos = ((ClAnimatedSceneObject*)objectList[t])->getOriginalPosition();
 			}
 			else
@@ -450,8 +474,8 @@ void ClBowlPlayer::checkTriangle(CollisionInfo *collInfo, ScePspFVector4 *tr1, S
 	float t0, t1;
 	bool embeded = false;
 	//the pos is moving parallel to the plane
-	if (triDotDir >= -0.00000001f
-		&& triDotDir <= 0.00000001f){
+	if (triDotDir >= -0.0000001f
+		&& triDotDir <= 0.0000001f){
 		//the sphere is not intersecting the plane
 		//therefore no collision possible
 		if (fabsf(distance) >= boundingSphere){
@@ -481,7 +505,8 @@ void ClBowlPlayer::checkTriangle(CollisionInfo *collInfo, ScePspFVector4 *tr1, S
 			return;
 		}
 		//make sure the values are
-		if (t0 < 0.0f) t0 = 0.0f;
+		if (t0 < 0.0f)
+			t0 = 0.0f;
 		if (t1 < 0.0f) t1 = 0.0f;
 		if (t0 > 1.0f) t0 = 1.0f;
 		if (t1 > 1.0f) t1 = 1.0f;
@@ -621,8 +646,7 @@ void ClBowlPlayer::checkTriangle(CollisionInfo *collInfo, ScePspFVector4 *tr1, S
 }
 
 void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo, float gravityValue){
-	//we now knew the triangle which we collide with and have already moved
-	//to the collision point, now do the collision response step
+	//we now knew the triangle which we collide with. Now do the collision response step
 	//move to the collision point (but only very close to and not exactly)
 	//if we are not already very close to
 	if (collInfo->nearestDistance >= 0.0005f){
@@ -650,16 +674,17 @@ void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo, float gravityValue
 		 * this new direction vector is the cross product
 		 * of normal and gravity and the cross product of this result
 		 * with the normal again
-		 * the gravity is only directed in y direction with -1
+		 * the gravity is only directed in y direction with gravityValue
 		 */
 		ScePspFVector4 normal;
 		ScePspFVector4 gravity = {0.0f, -gravityValue, 0.0f, 0.0f};
 		ClVectorHelper::crossProduct(&normal, &collInfo->collPlane->normal, &gravity);
 		ClVectorHelper::crossProduct(&acceleration, &normal, &collInfo->collPlane->normal);
 		acceleration.w = 0.0f;
+		//float accel = ClVectorHelper::length(&acceleration);
 		//scale the acceleration vector - why ?
 		//check without...
-		ClVectorHelper::scale(&acceleration, 0.05f);
+		ClVectorHelper::scale(&acceleration, 0.045f);
 
 		//if the bowl is currently moving it should continue the same, but
 		//on the new plane.
@@ -681,9 +706,12 @@ void ClBowlPlayer::collisionHandling(CollisionInfo* collInfo, float gravityValue
 				newDir.z = 0.0f;
 				newDir.y = 0.0;//-gravityValue/80.0f;
 			} else {
-				newDir.x = direction.x + acceleration.x;
-				newDir.z = direction.z + acceleration.z;
-				newDir.y = (-collInfo->collPlane->normal.x*direction.x - collInfo->collPlane->normal.z*direction.z)/collInfo->collPlane->normal.y;
+				//calculate the resulting speed of the bowl in the new direction
+				//it will be influenced by the acceleration of the touched plane
+				//as well as the already existing speed
+				newDir.x = acceleration.x + direction.x;
+				newDir.z = acceleration.z + direction.z;
+				newDir.y = (-collInfo->collPlane->normal.x*newDir.x - collInfo->collPlane->normal.z*newDir.z)/collInfo->collPlane->normal.y;//acceleration.y + (-collInfo->collPlane->normal.x*direction.x - collInfo->collPlane->normal.z*direction.z)/collInfo->collPlane->normal.y;
 /*				//normalize the new direction vector
 				ClVectorHelper::normalize(&newDir);
 
